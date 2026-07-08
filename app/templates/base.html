@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}پنل Certbot{% endblock %}</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #334155;
+            --border: #475569;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+            --radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        header .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), #8b5cf6);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem 1rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            direction: ltr;
+            text-align: left;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #16a34a; }
+
+        .btn-warning { background: var(--warning); color: #1e293b; }
+        .btn-warning:hover { background: #d97706; }
+
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .btn-secondary { background: var(--surface2); color: var(--text); }
+        .btn-secondary:hover { background: var(--border); }
+
+        .btn-sm { padding: 0.5rem 0.875rem; font-size: 0.85rem; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-success { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .badge-info { background: rgba(6, 182, 212, 0.15); color: var(--info); }
+        .badge-secondary { background: rgba(148, 163, 184, 0.15); color: var(--text-muted); }
+
+        .domain-list { list-style: none; }
+
+        .domain-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            transition: border-color 0.15s;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .domain-item:hover { border-color: var(--primary); }
+
+        .domain-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+            direction: ltr;
+            text-align: left;
+        }
+
+        .domain-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .domain-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .alert {
+            padding: 1rem 1.25rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            font-size: 0.95rem;
+        }
+
+        .alert-success { background: rgba(34, 197, 94, 0.1); border: 1px solid var(--success); color: var(--success); }
+        .alert-danger { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); color: var(--danger); }
+        .alert-info { background: rgba(6, 182, 212, 0.1); border: 1px solid var(--info); color: var(--info); }
+
+        .record-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin: 1rem 0;
+        }
+
+        .record-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .record-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            min-width: 60px;
+            flex-shrink: 0;
+            padding-top: 0.5rem;
+        }
+
+        .record-value {
+            flex: 1;
+            min-width: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            background: var(--surface2);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            direction: ltr;
+            text-align: left;
+            word-break: break-all;
+            user-select: all;
+        }
+
+        .copy-btn {
+            padding: 0.4rem 0.75rem;
+            font-size: 0.8rem;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-muted);
+            cursor: pointer;
+            flex-shrink: 0;
+            margin-top: 0.15rem;
+        }
+
+        .copy-btn:hover { color: var(--text); border-color: var(--primary); }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin: 1rem 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            padding: 0.5rem 2.5rem 0.5rem 0;
+            position: relative;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            right: 0;
+            top: 0.35rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            background: var(--surface2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text);
+            flex-shrink: 0;
+        }
+
+        .dns-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.65rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .dns-status-found { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .dns-status-mismatch { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .dns-status-missing { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .dns-status-nxdomain { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+        .dns-found-box {
+            margin-top: 0.5rem;
+            padding: 0.65rem 0.75rem;
+            background: var(--surface2);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .dns-found-box .label {
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .dns-found-values {
+            font-family: 'Courier New', monospace;
+            direction: ltr;
+            text-align: left;
+            word-break: break-all;
+            color: var(--text);
+        }
+
+        .alert .spinner {
+            margin-inline-end: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-box {
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            direction: ltr;
+            text-align: left;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            color: #fca5a5;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">🔒</div>
+            <div>
+                <h1><a href="/" style="color:inherit;text-decoration:none;">پنل Certbot</a></h1>
+            </div>
+        </header>
+
+        {% block content %}{% endblock %}
+
+        <footer>گواهی Wildcard با DNS Challenge دستی — Let's Encrypt</footer>
+    </div>
+
+    <script>
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                const orig = btn.textContent;
+                btn.textContent = 'کپی شد ✓';
+                setTimeout(() => btn.textContent = orig, 2000);
+            });
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

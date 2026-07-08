@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}پنل Certbot — دامنه‌ها{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>➕ افزودن دامنه جدید</h2>
+    <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1rem;">
+        گواهی Wildcard برای <code style="direction:ltr">*.example.com</code> و <code style="direction:ltr">example.com</code> صادر می‌شود.
+    </p>
+    <form action="/domains/add" method="post">
+        <div class="form-group">
+            <input type="text" name="domain" placeholder="example.com" required
+                   pattern="[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+"
+                   title="مثال: example.com">
+            <button type="submit" class="btn btn-primary">شروع صدور گواهی</button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h2>📋 لیست دامنه‌ها</h2>
+
+    {% if domains %}
+    <ul class="domain-list">
+        {% for d in domains %}
+        <li class="domain-item">
+            <div>
+                <div class="domain-name">{{ d.domain }}</div>
+                <div class="domain-meta">
+                    <span class="badge badge-{{ d.status_color }}">{{ d.status_label }}</span>
+                    {% if d.cert_expires_at %}
+                    · انقضا: <span style="direction:ltr;display:inline-block">{{ d.cert_expires_at[:10] }}</span>
+                    {% endif %}
+                    {% if d.is_running %}
+                    · <span class="spinner"></span> در حال پردازش
+                    {% endif %}
+                </div>
+            </div>
+            <div class="domain-actions">
+                <a href="/domains/{{ d.id }}" class="btn btn-secondary btn-sm">جزئیات</a>
+                {% if d.status == 'active' %}
+                <form action="/domains/{{ d.id }}/renew" method="post" style="display:inline">
+                    <button type="submit" class="btn btn-warning btn-sm"
+                            {% if d.is_running %}disabled{% endif %}>تمدید</button>
+                </form>
+                <a href="/domains/{{ d.id }}/download" class="btn btn-success btn-sm">دانلود</a>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>هنوز دامنه‌ای ثبت نشده است.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}{{ domain.domain }} — پنل Certbot{% endblock %}
+
+{% block content %}
+<p style="margin-bottom:1.5rem;">
+    <a href="/" style="color:var(--text-muted);text-decoration:none;">← بازگشت به لیست</a>
+</p>
+
+{% if request.query_params.get('success') %}
+<div class="alert alert-success">{{ request.query_params.get('success') }}</div>
+{% endif %}
+{% if request.query_params.get('error') %}
+<div class="alert alert-danger">{{ request.query_params.get('error') }}</div>
+{% endif %}
+
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+        <h2 style="margin:0;direction:ltr">{{ domain.domain }}</h2>
+        <span class="badge badge-{{ domain.status_color }}">{{ domain.status_label }}</span>
+    </div>
+
+    <p style="color:var(--text-muted);font-size:0.9rem;">
+        پوشش: <code style="direction:ltr">*.{{ domain.domain }}</code> + <code style="direction:ltr">{{ domain.domain }}</code>
+    </p>
+
+    {% if domain.cert_expires_at %}
+    <p style="color:var(--text-muted);font-size:0.9rem;margin-top:0.5rem;">
+        تاریخ انقضا: <span style="direction:ltr">{{ domain.cert_expires_at[:19] }}</span>
+    </p>
+    {% endif %}
+
+    {% if domain.is_running %}
+    <div class="alert alert-info" style="margin-top:1rem;">
+        <span class="spinner"></span>
+        {% if domain.status == 'renewing' %}
+        در حال تمدید گواهی... لطفاً صبر کنید.
+        {% elif domain.status in ('issuing', 'verifying') %}
+        در حال صدور گواهی... لطفاً صبر کنید.
+        {% else %}
+        در حال پردازش... اگر رکورد TXT نمایش داده نشده، چند ثانیه صبر کنید.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if domain.challenges and domain.status in ('pending_dns', 'renewing') %}
+<div class="card">
+    <h2>📝 رکورد DNS مورد نیاز</h2>
+
+    <ol class="steps">
+        <li>به پنل DNS دامنه خود بروید</li>
+        <li>رکورد(های) TXT زیر را اضافه کنید (ممکن است چند مقدار برای یک نام لازم باشد)</li>
+        <li>چند دقیقه صبر کنید تا DNS propagate شود</li>
+        <li>وضعیت هر رکورد را در باکس زیر بررسی کنید (مقادیر فعلی DNS نمایش داده می‌شود)</li>
+        <li>دکمه «بررسی و صدور گواهی» را بزنید</li>
+        {% if domain.challenges | length == 1 %}
+        <li>اگر فقط یک رکورد می‌بینید، ابتدا آن را تنظیم کرده و یکبار بررسی کنید — challenge بعدی بعد از آن نمایش داده می‌شود</li>
+        {% else %}
+        <li>اگر challenge جدیدی اضافه شد، رکورد جدید را تنظیم کرده و دوباره بررسی کنید</li>
+        {% endif %}
+    </ol>
+
+    {% for ch in domain.challenges %}
+    <div class="record-box"{% if domain.waiting_challenge == ch.certbot_domain %} style="border-color:var(--primary)"{% endif %}>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;direction:ltr">
+            Challenge برای: {{ ch.certbot_domain }}
+            {% if domain.waiting_challenge == ch.certbot_domain %}
+            <span class="badge badge-info" style="margin-inline-start:0.5rem">در انتظار تأیید</span>
+            {% endif %}
+        </p>
+
+        {% if ch.dns_status %}
+        <span class="dns-status dns-status-{{ ch.dns_status }}">
+            {% if ch.dns_status == 'found' %}✓ مقدار صحیح یافت شد
+            {% elif ch.dns_status == 'mismatch' %}✗ مقدار مطابقت ندارد
+            {% elif ch.dns_status == 'nxdomain' %}✗ دامنه یافت نشد
+            {% else %}⏳ هنوز در DNS نیست{% endif %}
+        </span>
+        {% endif %}
+
+        <div class="record-row">
+            <span class="record-label">نوع</span>
+            <span class="record-value" style="flex:0 0 auto">TXT</span>
+        </div>
+        <div class="record-row">
+            <span class="record-label">نام</span>
+            <span class="record-value" id="txt-name-{{ loop.index }}">{{ ch.txt_name }}</span>
+            <button type="button" class="copy-btn" onclick="copyText(document.getElementById('txt-name-{{ loop.index }}').textContent, this)">کپی</button>
+        </div>
+        <div class="record-row">
+            <span class="record-label">مقدار</span>
+            <span class="record-value" id="txt-value-{{ loop.index }}">{{ ch.txt_value }}</span>
+            <button type="button" class="copy-btn" onclick="copyText(document.getElementById('txt-value-{{ loop.index }}').textContent, this)">کپی</button>
+        </div>
+
+        {% if ch.dns_found is defined and ch.dns_found %}
+        <div class="dns-found-box">
+            <div class="label">مقادیر فعلی در DNS:</div>
+            <div class="dns-found-values">{{ ch.dns_found | join(' | ') }}</div>
+        </div>
+        {% elif ch.dns_status == 'missing' %}
+        <div class="dns-found-box">
+            <div class="label">مقادیر فعلی در DNS:</div>
+            <div class="dns-found-values" style="color:var(--text-muted)">(هیچ مقداری یافت نشد)</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <form action="/domains/{{ domain.id }}/verify" method="post" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-success" {% if domain.is_running and domain.status not in ('pending_dns', 'renewing') %}disabled{% endif %}>
+            ✓ بررسی DNS و صدور گواهی
+        </button>
+    </form>
+</div>
+{% endif %}
+
+{% if domain.status == 'active' %}
+<div class="card">
+    <h2>✅ گواهی صادر شد</h2>
+    <p style="color:var(--text-muted);margin-bottom:1rem;font-size:0.9rem;">
+        فایل‌های گواهی آماده دانلود هستند.
+    </p>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <a href="/domains/{{ domain.id }}/download" class="btn btn-success">📥 دانلود گواهی (ZIP)</a>
+        <form action="/domains/{{ domain.id }}/renew" method="post" style="display:inline">
+            <button type="submit" class="btn btn-warning" {% if domain.is_running %}disabled{% endif %}>
+                🔄 تمدید گواهی
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if domain.status == 'failed' %}
+<div class="card">
+    <h2>❌ خطا در صدور گواهی</h2>
+    {% if domain.error_message %}
+    <div class="error-box">{{ domain.error_message }}</div>
+    {% endif %}
+    <form action="/domains/{{ domain.id }}/retry" method="post" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary" {% if domain.is_running %}disabled{% endif %}>
+            🔁 تلاش مجدد
+        </button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card" style="border-color:var(--danger);">
+    <form action="/domains/{{ domain.id }}/delete" method="post"
+          onsubmit="return confirm('آیا مطمئن هستید؟')">
+        <button type="submit" class="btn btn-danger btn-sm" {% if domain.is_running %}disabled{% endif %}>
+            🗑 حذف دامنه از پنل
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if domain.status in ('pending_dns', 'renewing', 'verifying', 'issuing') and not domain.challenges %}
+<script>
+    // Auto-refresh until TXT record appears or status changes
+    setTimeout(() => location.reload(), 3000);
+</script>
+{% elif domain.challenges and domain.status in ('pending_dns', 'renewing') %}
+<script>
+    // Refresh DNS status periodically
+    setTimeout(() => location.reload(), 15000);
+</script>
+{% elif domain.is_running %}
+<script>
+    setTimeout(() => location.reload(), 5000);
+</script>
+{% endif %}
+{% endblock %}
