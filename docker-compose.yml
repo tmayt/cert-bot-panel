@@ -11,6 +11,9 @@ services:
       - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-admin@example.com}
       - CERTBOT_STAGING=${CERTBOT_STAGING:-false}
       - CERTBOT_API_TOKEN=${CERTBOT_API_TOKEN:-}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
     restart: unless-stopped
 
 volumes:

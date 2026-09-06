@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}ورود — پنل Certbot{% endblock %}
+
+{% block content %}
+<div class="card login-card">
+    <h2>ورود ادمین</h2>
+    <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1.25rem;">
+        برای دسترسی به پنل، با حساب ادمین وارد شوید.
+    </p>
+
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <form action="/login" method="post" class="login-form">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <label class="field-label" for="username">نام کاربری</label>
+        <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+        <label class="field-label" for="password">رمز عبور</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">ورود</button>
+    </form>
+</div>
+{% endblock %}

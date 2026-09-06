@@ -13,16 +13,13 @@
 ## راه‌اندازی
 
 ```bash
-# تنظیم ایمیل Let's Encrypt
-export LETSENCRYPT_EMAIL=your@email.com
-
-# (اختیاری) استفاده از staging برای تست
-export CERTBOT_STAGING=true
+cp .env.example .env
+# ایمیل Let's Encrypt و یوزرنیم/پسورد ادمین را در .env تنظیم کنید
 
 docker compose up -d --build
 ```
 
-پنل روی `http://localhost:8000` در دسترس است.
+پنل روی `http://localhost:4234` در دسترس است. قبل از استفاده باید با حساب ادمین وارد شوید.
 
 ## نحوه استفاده
 
@@ -39,6 +36,9 @@ docker compose up -d --build
 | `LETSENCRYPT_EMAIL` | `admin@example.com` | ایمیل ثبت در Let's Encrypt |
 | `CERTBOT_STAGING` | `false` | استفاده از سرور staging برای تست |
 | `CERTBOT_API_TOKEN` | خالی | اگر تنظیم شود، همه مسیرهای `/api` به هدر `X-API-Key` نیاز دارند |
+| `ADMIN_USERNAME` | `admin` | نام کاربری ورود به پنل |
+| `ADMIN_PASSWORD` | خالی | رمز عبور ورود به پنل (الزامی) |
+| `SESSION_SECRET` | خالی | کلید امضای کوکی نشست؛ در ری‌استارت ثابت بماند |
 
 ## API
 

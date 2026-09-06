@@ -3,16 +3,31 @@ import zipfile
 from pathlib import Path
 from urllib.parse import quote
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from app.api import DOMAIN_RE, router as api_router, serialize_domain
+from app.auth import (
+    SESSION_SECRET,
+    credentials_configured,
+    login_user,
+    logout_user,
+    require_login,
+    safe_next_url,
+    verify_credentials,
+)
 from app.certbot_service import get_cert_files, is_running, issue_certificate, renew_certificate
 from app.database import init_db
 from app.dns_checker import verify_domain
 
 app = FastAPI(title="Certbot Panel", description="پنل مدیریت گواهی SSL با DNS Challenge")
+app.middleware("http")(require_login)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, session_cookie="certbot_session")
 app.include_router(api_router)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -22,6 +37,43 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 @app.on_event("startup")
 def startup():
     init_db()
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, next: str = "/"):
+    if request.session.get("authenticated"):
+        return RedirectResponse(safe_next_url(next), status_code=303)
+    error = None
+    if not credentials_configured():
+        error = "حساب ادمین در فایل .env تنظیم نشده است."
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "next_url": safe_next_url(next),
+        "error": error,
+    })
+
+
+@app.post("/login")
+async def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+):
+    if verify_credentials(username.strip(), password):
+        login_user(request)
+        return RedirectResponse(safe_next_url(next), status_code=303)
+    return templates.TemplateResponse("login.html", {
+        "request": request,
+        "next_url": safe_next_url(next),
+        "error": "نام کاربری یا رمز عبور نادرست است.",
+    }, status_code=401)
+
+
+@app.post("/logout")
+async def logout(request: Request):
+    logout_user(request)
+    return RedirectResponse("/login", status_code=303)
 
 
 @app.get("/", response_class=HTMLResponse)
