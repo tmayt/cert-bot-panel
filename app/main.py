@@ -1,5 +1,4 @@
 import io
-import re
 import zipfile
 from pathlib import Path
 from urllib.parse import quote
@@ -8,37 +7,16 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app import database as db
-from app.certbot_service import get_cert_expiry, get_cert_files, is_running, issue_certificate, read_state, renew_certificate
+from app.api import DOMAIN_RE, router as api_router, serialize_domain
+from app.certbot_service import get_cert_files, is_running, issue_certificate, renew_certificate
 from app.database import init_db
-from app.dns_checker import inspect_challenges, verify_domain
+from app.dns_checker import verify_domain
 
 app = FastAPI(title="Certbot Panel", description="پنل مدیریت گواهی SSL با DNS Challenge")
+app.include_router(api_router)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-DOMAIN_RE = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
-)
-
-STATUS_LABELS = {
-    "pending_dns": "در انتظار DNS",
-    "verifying": "در حال بررسی",
-    "issuing": "در حال صدور",
-    "active": "فعال",
-    "failed": "خطا",
-    "renewing": "در حال تمدید",
-}
-
-STATUS_COLORS = {
-    "pending_dns": "warning",
-    "verifying": "info",
-    "issuing": "info",
-    "active": "success",
-    "failed": "danger",
-    "renewing": "info",
-}
 
 
 @app.on_event("startup")
@@ -46,25 +24,11 @@ def startup():
     init_db()
 
 
-def _enrich_domain(domain: dict) -> dict:
-    d = dict(domain)
-    d["status_label"] = STATUS_LABELS.get(d["status"], d["status"])
-    d["status_color"] = STATUS_COLORS.get(d["status"], "secondary")
-    d["is_running"] = is_running(d["id"])
-    state = read_state(d["id"]) or {}
-    d["waiting_challenge"] = state.get("current")
-    challenges = db.get_challenges(d["id"])
-    d["challenges"] = challenges
-    if challenges and d["status"] in ("pending_dns", "renewing"):
-        d["challenges"] = inspect_challenges(challenges)
-    if d["status"] == "active" and not d.get("cert_expires_at"):
-        d["cert_expires_at"] = get_cert_expiry(d["domain"])
-    return d
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    domains = [_enrich_domain(d) for d in db.list_domains()]
+    from app import database as db
+
+    domains = [serialize_domain(d) for d in db.list_domains()]
     return templates.TemplateResponse("index.html", {
         "request": request,
         "domains": domains,
@@ -73,6 +37,8 @@ async def index(request: Request):
 
 @app.post("/domains/add")
 async def add_domain(domain: str = Form(...)):
+    from app import database as db
+
     domain = domain.strip().lower().removeprefix("*.")
     if not DOMAIN_RE.match(domain):
         raise HTTPException(400, "فرمت دامنه نامعتبر است")
@@ -88,10 +54,12 @@ async def add_domain(domain: str = Form(...)):
 
 @app.get("/domains/{domain_id}", response_class=HTMLResponse)
 async def domain_detail(request: Request, domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
-    domain = _enrich_domain(domain)
+    domain = serialize_domain(domain)
     return templates.TemplateResponse("domain.html", {
         "request": request,
         "domain": domain,
@@ -100,6 +68,8 @@ async def domain_detail(request: Request, domain_id: int):
 
 @app.post("/domains/{domain_id}/verify")
 async def verify_dns(domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
@@ -119,6 +89,8 @@ async def verify_dns(domain_id: int):
 
 @app.post("/domains/{domain_id}/renew")
 async def renew(domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
@@ -130,6 +102,8 @@ async def renew(domain_id: int):
 
 @app.post("/domains/{domain_id}/retry")
 async def retry(domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
@@ -141,6 +115,8 @@ async def retry(domain_id: int):
 
 @app.post("/domains/{domain_id}/delete")
 async def delete_domain(domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
@@ -152,6 +128,8 @@ async def delete_domain(domain_id: int):
 
 @app.get("/domains/{domain_id}/download")
 async def download_cert(domain_id: int):
+    from app import database as db
+
     domain = db.get_domain(domain_id)
     if not domain:
         raise HTTPException(404, "دامنه یافت نشد")
@@ -172,16 +150,3 @@ async def download_cert(domain_id: int):
             "Content-Disposition": f'attachment; filename="{domain["domain"]}.zip"'
         },
     )
-
-
-@app.get("/api/domains")
-async def api_list_domains():
-    return [_enrich_domain(d) for d in db.list_domains()]
-
-
-@app.get("/api/domains/{domain_id}")
-async def api_get_domain(domain_id: int):
-    domain = db.get_domain(domain_id)
-    if not domain:
-        raise HTTPException(404)
-    return _enrich_domain(domain)
