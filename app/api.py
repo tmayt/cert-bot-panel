@@ -66,6 +66,23 @@ def require_api_key(
         raise HTTPException(401, "API key نامعتبر است")
 
 
+def summarize_domain(domain: dict) -> dict:
+    """List-row fields only. Skips live DNS lookups."""
+    status = domain["status"]
+    expires = domain.get("cert_expires_at")
+    if status == "active" and not expires:
+        expires = get_cert_expiry(domain["domain"])
+    return {
+        "id": domain["id"],
+        "domain": domain["domain"],
+        "status": status,
+        "status_label": STATUS_LABELS.get(status, status),
+        "status_color": STATUS_COLORS.get(status, "secondary"),
+        "is_running": is_running(domain["id"]),
+        "cert_expires_at": expires,
+    }
+
+
 def serialize_domain(domain: dict) -> dict:
     d = dict(domain)
     d["verified"] = bool(d.get("verified"))
@@ -80,6 +97,7 @@ def serialize_domain(domain: dict) -> dict:
     d["is_running"] = is_running(d["id"])
     state = read_state(d["id"]) or {}
     d["waiting_challenge"] = state.get("current")
+    d["awaiting_user"] = bool(state.get("awaiting_user"))
     challenges = db.get_challenges(d["id"])
     d["challenges"] = challenges
     if challenges and d["status"] in ("pending_dns", "renewing"):

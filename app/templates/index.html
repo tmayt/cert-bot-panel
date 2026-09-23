@@ -4,57 +4,138 @@
 
 {% block content %}
 <div class="card">
-    <h2>➕ افزودن دامنه جدید</h2>
-    <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1rem;">
+    <h2>دامنه جدید</h2>
+    <p class="hint" style="margin-bottom:1rem;">
         گواهی Wildcard برای <code style="direction:ltr">*.example.com</code> و <code style="direction:ltr">example.com</code> صادر می‌شود.
     </p>
-    <form action="/domains/add" method="post">
+    <form action="/domains/add" method="post" id="add-form">
         <div class="form-group">
             <input type="text" name="domain" placeholder="example.com" required
                    pattern="[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+"
-                   title="مثال: example.com">
-            <button type="submit" class="btn btn-primary">شروع صدور گواهی</button>
+                   title="مثال: example.com" autocomplete="off">
+            <button type="submit" class="btn btn-primary" id="add-btn">شروع صدور گواهی</button>
         </div>
     </form>
 </div>
 
 <div class="card">
-    <h2>📋 لیست دامنه‌ها</h2>
+    <div class="section-head">
+        <h2 style="margin:0;">دامنه‌ها</h2>
+        <span id="list-live" class="live-dot"><span id="list-stamp">وضعیت خودکار به‌روز می‌شود</span></span>
+    </div>
 
     {% if domains %}
-    <ul class="domain-list">
+    <ul class="domain-list" id="domain-list" style="margin-top:1rem;">
         {% for d in domains %}
-        <li class="domain-item">
-            <div>
+        <li class="domain-item{% if d.is_running %} is-busy{% endif %}" data-id="{{ d.id }}" data-status="{{ d.status }}">
+            <a class="domain-main" href="/domains/{{ d.id }}">
                 <div class="domain-name">{{ d.domain }}</div>
                 <div class="domain-meta">
-                    <span class="badge badge-{{ d.status_color }}">{{ d.status_label }}</span>
-                    {% if d.cert_expires_at %}
-                    · انقضا: <span style="direction:ltr;display:inline-block">{{ d.cert_expires_at[:10] }}</span>
-                    {% endif %}
-                    {% if d.is_running %}
-                    · <span class="spinner"></span> در حال پردازش
-                    {% endif %}
+                    <span class="badge badge-{{ d.status_color }}" data-role="badge">{{ d.status_label }}</span>
+                    <span data-role="expiry" {% if not d.cert_expires_at %}hidden{% endif %}>
+                        · انقضا <span data-role="expiry-value" style="direction:ltr;display:inline-block">{% if d.cert_expires_at %}{{ d.cert_expires_at[:10] }}{% endif %}</span>
+                    </span>
+                    <span data-role="busy" {% if not d.is_running %}hidden{% endif %}> · در حال پردازش</span>
                 </div>
-            </div>
+            </a>
             <div class="domain-actions">
                 <a href="/domains/{{ d.id }}" class="btn btn-secondary btn-sm">جزئیات</a>
                 {% if d.status == 'active' %}
-                <form action="/domains/{{ d.id }}/renew" method="post" style="display:inline">
-                    <button type="submit" class="btn btn-warning btn-sm"
-                            {% if d.is_running %}disabled{% endif %}>تمدید</button>
+                <form action="/domains/{{ d.id }}/renew" method="post" data-role="renew">
+                    <button type="submit" class="btn btn-warning btn-sm" {% if d.is_running %}disabled{% endif %}>تمدید</button>
                 </form>
-                <a href="/domains/{{ d.id }}/download" class="btn btn-success btn-sm">دانلود</a>
+                <a href="/domains/{{ d.id }}/download" class="btn btn-success btn-sm" data-role="download">دانلود</a>
                 {% endif %}
             </div>
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    <div class="empty-state">
+    <div class="empty-state" id="empty-state">
         <div class="icon">📭</div>
         <p>هنوز دامنه‌ای ثبت نشده است.</p>
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+    const form = document.getElementById("add-form");
+    form.addEventListener("submit", () => {
+        const btn = document.getElementById("add-btn");
+        btn.disabled = true;
+        btn.textContent = "در حال شروع...";
+    });
+
+    const list = document.getElementById("domain-list");
+    if (!list) return;
+
+    function stamp(ok) {
+        const dot = document.getElementById("list-live");
+        const label = document.getElementById("list-stamp");
+        if (ok) {
+            dot.classList.remove("is-off");
+            const t = new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+            label.textContent = "به‌روز شد " + t;
+        } else {
+            dot.classList.add("is-off");
+            label.textContent = "ارتباط قطع شد، تلاش دوباره";
+        }
+    }
+
+    function apply(domains) {
+        const ids = domains.map((d) => String(d.id)).join(",");
+        const current = [...list.querySelectorAll("[data-id]")].map((el) => el.dataset.id).join(",");
+        if (ids !== current) {
+            location.reload();
+            return;
+        }
+        domains.forEach((d) => {
+            const row = list.querySelector(`[data-id="${d.id}"]`);
+            if (!row) return;
+            if ((row.dataset.status === "active") !== (d.status === "active")) {
+                location.reload();
+                return;
+            }
+            row.dataset.status = d.status;
+            row.classList.toggle("is-busy", !!d.is_running);
+            const badge = row.querySelector("[data-role=badge]");
+            badge.textContent = d.status_label || d.status;
+            badge.className = "badge badge-" + (d.status_color || "secondary");
+            const expiry = row.querySelector("[data-role=expiry]");
+            if (d.cert_expires_at) {
+                row.querySelector("[data-role=expiry-value]").textContent = String(d.cert_expires_at).slice(0, 10);
+                expiry.hidden = false;
+            }
+            row.querySelector("[data-role=busy]").hidden = !d.is_running;
+            const renew = row.querySelector("[data-role=renew] button");
+            if (renew) renew.disabled = !!d.is_running;
+            const download = row.querySelector("[data-role=download]");
+            if (download) download.hidden = d.status !== "active";
+        });
+        stamp(true);
+    }
+
+    async function tick() {
+        if (document.hidden) {
+            setTimeout(tick, 3000);
+            return;
+        }
+        try {
+            const res = await fetch("/domains/live", { headers: { Accept: "application/json" }, cache: "no-store" });
+            if (!res.ok) throw new Error("status");
+            const data = await res.json();
+            apply(data.domains || []);
+        } catch (err) {
+            stamp(false);
+        }
+        const busy = !!list.querySelector(".is-busy");
+        setTimeout(tick, busy ? 4000 : 12000);
+    }
+
+    setTimeout(tick, 2500);
+})();
+</script>
 {% endblock %}

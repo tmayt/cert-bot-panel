@@ -96,21 +96,15 @@ def verify_domain(domain_id: int) -> tuple[bool, str]:
     if not domain:
         return False, "دامنه یافت نشد"
 
+    state = read_state(domain_id) or {}
+    if not state.get("awaiting_user"):
+        return False, "چالش دوم هنوز آماده نشده. چند ثانیه صبر کنید تا هر دو رکورد نمایش داده شود."
+
     challenges = db.get_challenges(domain_id)
     if not challenges:
         return False, "رکورد TXT هنوز آماده نشده. لطفاً چند ثانیه صبر کنید."
 
-    state = read_state(domain_id) or {}
-    current = state.get("current")
-    if current:
-        pending = [ch for ch in challenges if ch["certbot_domain"] == current]
-        if not pending:
-            pending = [challenges[-1]]
-        to_check = pending
-    else:
-        to_check = challenges
-
-    for ch in to_check:
+    for ch in challenges:
         ok, message, _ = check_txt_record(ch["txt_name"], ch["txt_value"])
         if not ok:
             label = ch.get("certbot_domain") or ch["txt_name"]

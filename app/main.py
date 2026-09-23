@@ -5,13 +5,13 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-from app.api import DOMAIN_RE, router as api_router, serialize_domain
+from app.api import DOMAIN_RE, router as api_router, serialize_domain, summarize_domain
 from app.auth import (
     SESSION_SECRET,
     credentials_configured,
@@ -80,11 +80,19 @@ async def logout(request: Request):
 async def index(request: Request):
     from app import database as db
 
-    domains = [serialize_domain(d) for d in db.list_domains()]
+    domains = [summarize_domain(d) for d in db.list_domains()]
     return templates.TemplateResponse("index.html", {
         "request": request,
         "domains": domains,
     })
+
+
+@app.get("/domains/live")
+async def domains_live():
+    from app import database as db
+
+    payload = [summarize_domain(d) for d in db.list_domains()]
+    return JSONResponse({"domains": payload}, headers={"Cache-Control": "no-store"})
 
 
 @app.post("/domains/add")
@@ -116,6 +124,16 @@ async def domain_detail(request: Request, domain_id: int):
         "request": request,
         "domain": domain,
     })
+
+
+@app.get("/domains/{domain_id}/live")
+async def domain_live(domain_id: int):
+    from app import database as db
+
+    domain = db.get_domain(domain_id)
+    if not domain:
+        raise HTTPException(404, "دامنه یافت نشد")
+    return JSONResponse(serialize_domain(domain), headers={"Cache-Control": "no-store"})
 
 
 @app.post("/domains/{domain_id}/verify")

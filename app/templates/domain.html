@@ -3,9 +3,7 @@
 {% block title %}{{ domain.domain }} — پنل Certbot{% endblock %}
 
 {% block content %}
-<p style="margin-bottom:1.5rem;">
-    <a href="/" style="color:var(--text-muted);text-decoration:none;">← بازگشت به لیست</a>
-</p>
+<a class="back-link" href="/">بازگشت به لیست</a>
 
 {% if request.query_params.get('success') %}
 <div class="alert alert-success">{{ request.query_params.get('success') }}</div>
@@ -15,162 +13,393 @@
 {% endif %}
 
 <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
-        <h2 style="margin:0;direction:ltr">{{ domain.domain }}</h2>
-        <span class="badge badge-{{ domain.status_color }}">{{ domain.status_label }}</span>
+    <div class="hero-top">
+        <div class="hero-copy">
+            <p class="eyebrow">گواهی Wildcard</p>
+            <h2 class="domain-title"><bdi dir="ltr">{{ domain.domain }}</bdi></h2>
+            <p class="coverage">
+                پوشش <bdi dir="ltr">*.{{ domain.domain }}</bdi>
+                و
+                <bdi dir="ltr">{{ domain.domain }}</bdi>
+            </p>
+        </div>
+        <div class="hero-side">
+            <span id="status-badge" class="badge badge-{{ domain.status_color }}" aria-live="polite">{{ domain.status_label }}</span>
+            <span id="live-dot" class="live-dot"><span id="live-stamp">در حال همگام‌سازی</span></span>
+        </div>
     </div>
 
-    <p style="color:var(--text-muted);font-size:0.9rem;">
-        پوشش: <code style="direction:ltr">*.{{ domain.domain }}</code> + <code style="direction:ltr">{{ domain.domain }}</code>
+    <p id="expiry" class="meta-line" {% if not domain.cert_expires_at %}hidden{% endif %}>
+        انقضا: <span id="expiry-value" style="direction:ltr;display:inline-block">{% if domain.cert_expires_at %}{{ domain.cert_expires_at[:19] }}{% endif %}</span>
     </p>
 
-    {% if domain.cert_expires_at %}
-    <p style="color:var(--text-muted);font-size:0.9rem;margin-top:0.5rem;">
-        تاریخ انقضا: <span style="direction:ltr">{{ domain.cert_expires_at[:19] }}</span>
-    </p>
-    {% endif %}
-
-    {% if domain.is_running %}
-    <div class="alert alert-info" style="margin-top:1rem;">
+    <div id="running-alert" class="alert alert-info" style="margin-top:1rem;" {% if not domain.is_running %}hidden{% endif %}>
         <span class="spinner"></span>
-        {% if domain.status == 'renewing' %}
-        در حال تمدید گواهی... لطفاً صبر کنید.
-        {% elif domain.status in ('issuing', 'verifying') %}
-        در حال صدور گواهی... لطفاً صبر کنید.
-        {% else %}
-        در حال پردازش... اگر رکورد TXT نمایش داده نشده، چند ثانیه صبر کنید.
-        {% endif %}
-    </div>
-    {% endif %}
-</div>
-
-{% if domain.challenges and domain.status in ('pending_dns', 'renewing') %}
-<div class="card">
-    <h2>📝 رکورد DNS مورد نیاز</h2>
-
-    <ol class="steps">
-        <li>به پنل DNS دامنه خود بروید</li>
-        <li>رکورد(های) TXT زیر را اضافه کنید (ممکن است چند مقدار برای یک نام لازم باشد)</li>
-        <li>چند دقیقه صبر کنید تا DNS propagate شود</li>
-        <li>وضعیت هر رکورد را در باکس زیر بررسی کنید (مقادیر فعلی DNS نمایش داده می‌شود)</li>
-        <li>دکمه «بررسی و صدور گواهی» را بزنید</li>
-        {% if domain.challenges | length == 1 %}
-        <li>اگر فقط یک رکورد می‌بینید، ابتدا آن را تنظیم کرده و یکبار بررسی کنید — challenge بعدی بعد از آن نمایش داده می‌شود</li>
-        {% else %}
-        <li>اگر challenge جدیدی اضافه شد، رکورد جدید را تنظیم کرده و دوباره بررسی کنید</li>
-        {% endif %}
-    </ol>
-
-    {% for ch in domain.challenges %}
-    <div class="record-box"{% if domain.waiting_challenge == ch.certbot_domain %} style="border-color:var(--primary)"{% endif %}>
-        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.75rem;direction:ltr">
-            Challenge برای: {{ ch.certbot_domain }}
-            {% if domain.waiting_challenge == ch.certbot_domain %}
-            <span class="badge badge-info" style="margin-inline-start:0.5rem">در انتظار تأیید</span>
+        <span id="running-text">
+            {% if domain.status == 'renewing' %}
+            در حال تمدید گواهی. همین صفحه خودش به‌روز می‌شود.
+            {% elif domain.status in ('issuing', 'verifying') %}
+            در حال صدور گواهی. همین صفحه خودش به‌روز می‌شود.
+            {% else %}
+            در حال آماده‌کردن رکوردهای TXT. لازم نیست صفحه را رفرش کنید.
             {% endif %}
-        </p>
-
-        {% if ch.dns_status %}
-        <span class="dns-status dns-status-{{ ch.dns_status }}">
-            {% if ch.dns_status == 'found' %}✓ مقدار صحیح یافت شد
-            {% elif ch.dns_status == 'mismatch' %}✗ مقدار مطابقت ندارد
-            {% elif ch.dns_status == 'nxdomain' %}✗ دامنه یافت نشد
-            {% else %}⏳ هنوز در DNS نیست{% endif %}
         </span>
-        {% endif %}
-
-        <div class="record-row">
-            <span class="record-label">نوع</span>
-            <span class="record-value" style="flex:0 0 auto">TXT</span>
-        </div>
-        <div class="record-row">
-            <span class="record-label">نام</span>
-            <span class="record-value" id="txt-name-{{ loop.index }}">{{ ch.txt_name }}</span>
-            <button type="button" class="copy-btn" onclick="copyText(document.getElementById('txt-name-{{ loop.index }}').textContent, this)">کپی</button>
-        </div>
-        <div class="record-row">
-            <span class="record-label">مقدار</span>
-            <span class="record-value" id="txt-value-{{ loop.index }}">{{ ch.txt_value }}</span>
-            <button type="button" class="copy-btn" onclick="copyText(document.getElementById('txt-value-{{ loop.index }}').textContent, this)">کپی</button>
-        </div>
-
-        {% if ch.dns_found is defined and ch.dns_found %}
-        <div class="dns-found-box">
-            <div class="label">مقادیر فعلی در DNS:</div>
-            <div class="dns-found-values">{{ ch.dns_found | join(' | ') }}</div>
-        </div>
-        {% elif ch.dns_status == 'missing' %}
-        <div class="dns-found-box">
-            <div class="label">مقادیر فعلی در DNS:</div>
-            <div class="dns-found-values" style="color:var(--text-muted)">(هیچ مقداری یافت نشد)</div>
-        </div>
-        {% endif %}
     </div>
-    {% endfor %}
-
-    <form action="/domains/{{ domain.id }}/verify" method="post" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-success" {% if domain.is_running and domain.status not in ('pending_dns', 'renewing') %}disabled{% endif %}>
-            ✓ بررسی DNS و صدور گواهی
-        </button>
-    </form>
 </div>
-{% endif %}
 
-{% if domain.status == 'active' %}
-<div class="card">
-    <h2>✅ گواهی صادر شد</h2>
-    <p style="color:var(--text-muted);margin-bottom:1rem;font-size:0.9rem;">
-        فایل‌های گواهی آماده دانلود هستند.
+<div class="card" id="dns-card" {% if not (domain.challenges and domain.status in ('pending_dns', 'renewing')) %}hidden{% endif %}>
+    <div class="section-head">
+        <h2>رکوردهای DNS</h2>
+    </div>
+    <p id="dns-lead" class="hint">
+        {% set names = domain.challenges | map(attribute='txt_name') | unique | list %}
+        {% if domain.challenges | length > 1 and names | length == 1 %}
+        هر دو مقدار را همزمان روی <bdi dir="ltr">{{ names[0] }}</bdi> بگذارید؛ دو رکورد TXT جدا با همین نام.
+        {% elif domain.challenges | length > 1 %}
+        همه مقدارهای زیر را همزمان در DNS اضافه کنید.
+        {% else %}
+        این رکورد TXT را در DNS دامنه اضافه کنید.
+        {% endif %}
     </p>
-    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-        <a href="/domains/{{ domain.id }}/download" class="btn btn-success">📥 دانلود گواهی (ZIP)</a>
-        <form action="/domains/{{ domain.id }}/renew" method="post" style="display:inline">
-            <button type="submit" class="btn btn-warning" {% if domain.is_running %}disabled{% endif %}>
-                🔄 تمدید گواهی
-            </button>
+    <div class="progress-wrap">
+        <div class="progress-line" aria-hidden="true"><span id="dns-bar"></span></div>
+        <p id="dns-progress" class="progress-label" aria-live="polite"></p>
+    </div>
+
+    <details class="help">
+        <summary>مراحل تنظیم</summary>
+        <ol class="steps">
+            <li>به پنل DNS دامنه بروید</li>
+            <li>همه مقدارهای زیر را با هم اضافه کنید</li>
+            <li>چند دقیقه صبر کنید؛ وضعیت هر رکورد همین‌جا عوض می‌شود</li>
+            <li>وقتی همه سبز شد، «بررسی DNS و صدور گواهی» را بزنید</li>
+        </ol>
+    </details>
+
+    <div id="awaiting-alert" class="alert alert-info" {% if domain.awaiting_user or not domain.challenges %}hidden{% endif %}>
+        <span class="spinner"></span>
+        چالش بعدی در حال آماده‌شدن است. چند ثانیه دیگر مقدار جدید همین‌جا اضافه می‌شود.
+    </div>
+
+    <form id="verify-form" action="/domains/{{ domain.id }}/verify" method="post" class="action-row">
+        <button type="submit" class="btn btn-success" id="verify-btn">
+            بررسی DNS و صدور گواهی
+        </button>
+        <p class="hint" id="verify-hint"></p>
+    </form>
+
+    <div id="challenge-list" class="challenge-grid">
+        {% for ch in domain.challenges %}
+        <article class="record-box{% if ch.dns_status == 'found' %} is-ok{% endif %}" data-key="{{ ch.txt_value }}">
+            <p class="hint challenge-for" data-role="for">برای <bdi dir="ltr">{{ ch.certbot_domain }}</bdi></p>
+            <span class="dns-status dns-status-{{ ch.dns_status or 'missing' }}" data-role="status">
+                {% if ch.dns_status == 'found' %}مقدار صحیح یافت شد
+                {% elif ch.dns_status == 'mismatch' %}مقدار مطابقت ندارد
+                {% elif ch.dns_status == 'nxdomain' %}دامنه یافت نشد
+                {% else %}هنوز در DNS نیست{% endif %}
+            </span>
+            <div class="record-row">
+                <span class="record-label">نوع</span>
+                <span class="record-value" style="flex:0 0 auto">TXT</span>
+            </div>
+            <div class="record-row">
+                <span class="record-label">نام</span>
+                <span class="record-value" data-role="name">{{ ch.txt_name }}</span>
+                <button type="button" class="copy-btn" data-copy="name">کپی</button>
+            </div>
+            <div class="record-row">
+                <span class="record-label">مقدار</span>
+                <span class="record-value" data-role="value">{{ ch.txt_value }}</span>
+                <button type="button" class="copy-btn" data-copy="value">کپی</button>
+            </div>
+            <div class="dns-found-box">
+                <div class="label">الان در DNS:</div>
+                <div class="dns-found-values" data-role="found">
+                    {% if ch.dns_found %}{{ ch.dns_found | join(' | ') }}{% else %}(هیچ مقداری یافت نشد){% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+</div>
+
+<div class="card" id="active-card" {% if domain.status != 'active' %}hidden{% endif %}>
+    <h2>گواهی آماده است</h2>
+    <p class="hint" style="margin-bottom:1rem;">فایل‌ها را دانلود کنید یا در صورت نیاز تمدید را شروع کنید.</p>
+    <div class="action-row" style="margin-top:0;">
+        <a href="/domains/{{ domain.id }}/download" class="btn btn-success">دانلود گواهی (ZIP)</a>
+        <form action="/domains/{{ domain.id }}/renew" method="post">
+            <button type="submit" class="btn btn-warning" id="renew-btn" {% if domain.is_running %}disabled{% endif %}>تمدید گواهی</button>
         </form>
     </div>
 </div>
-{% endif %}
 
-{% if domain.status == 'failed' %}
-<div class="card">
-    <h2>❌ خطا در صدور گواهی</h2>
-    {% if domain.error_message %}
-    <div class="error-box">{{ domain.error_message }}</div>
-    {% endif %}
-    <form action="/domains/{{ domain.id }}/retry" method="post" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-primary" {% if domain.is_running %}disabled{% endif %}>
-            🔁 تلاش مجدد
-        </button>
+<div class="card" id="failed-card" {% if domain.status != 'failed' %}hidden{% endif %}>
+    <h2>صدور گواهی انجام نشد</h2>
+    <div class="error-box" id="error-box" {% if not domain.error_message %}hidden{% endif %}>{{ domain.error_message or '' }}</div>
+    <form action="/domains/{{ domain.id }}/retry" method="post" class="action-row">
+        <button type="submit" class="btn btn-primary" id="retry-btn" {% if domain.is_running %}disabled{% endif %}>تلاش مجدد</button>
     </form>
 </div>
-{% endif %}
 
-<div class="card" style="border-color:var(--danger);">
-    <form action="/domains/{{ domain.id }}/delete" method="post"
-          onsubmit="return confirm('آیا مطمئن هستید؟')">
-        <button type="submit" class="btn btn-danger btn-sm" {% if domain.is_running %}disabled{% endif %}>
-            🗑 حذف دامنه از پنل
-        </button>
+<div class="card quiet-card">
+    <form action="/domains/{{ domain.id }}/delete" method="post" onsubmit="return confirm('این دامنه از پنل حذف شود؟')">
+        <button type="submit" class="btn btn-danger btn-sm" id="delete-btn" {% if domain.is_running %}disabled{% endif %}>حذف دامنه از پنل</button>
     </form>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-{% if domain.status in ('pending_dns', 'renewing', 'verifying', 'issuing') and not domain.challenges %}
 <script>
-    // Auto-refresh until TXT record appears or status changes
-    setTimeout(() => location.reload(), 3000);
+(() => {
+    const domainId = {{ domain.id }};
+    const DNS_LABEL = {
+        found: "مقدار صحیح یافت شد",
+        mismatch: "مقدار مطابقت ندارد",
+        nxdomain: "دامنه یافت نشد",
+        missing: "هنوز در DNS نیست",
+    };
+    const list = document.getElementById("challenge-list");
+    const verifyBtn = document.getElementById("verify-btn");
+    const verifyHint = document.getElementById("verify-hint");
+    let timer = 0;
+
+    document.getElementById("verify-form").addEventListener("submit", () => {
+        verifyBtn.disabled = true;
+        verifyBtn.textContent = "در حال بررسی...";
+    });
+
+    list.addEventListener("click", (event) => {
+        const btn = event.target.closest("[data-copy]");
+        if (!btn) return;
+        const card = btn.closest("[data-key]");
+        const role = btn.dataset.copy === "name" ? "name" : "value";
+        const node = card.querySelector(`[data-role="${role}"]`);
+        copyText(node.textContent.trim(), btn);
+    });
+
+    function selectionInside(el) {
+        const sel = document.getSelection();
+        return !!(sel && !sel.isCollapsed && sel.anchorNode && el.contains(sel.anchorNode));
+    }
+
+    function cardElement(ch, fresh) {
+        const article = document.createElement("article");
+        article.className = "record-box" + (ch.dns_status === "found" ? " is-ok" : "") + (fresh ? " is-fresh" : "");
+        article.dataset.key = ch.txt_value;
+
+        const title = document.createElement("p");
+        title.className = "hint challenge-for";
+        title.dataset.role = "for";
+        title.append("برای ");
+        const who = document.createElement("bdi");
+        who.dir = "ltr";
+        who.textContent = ch.certbot_domain || "";
+        title.append(who);
+        article.appendChild(title);
+
+        const status = document.createElement("span");
+        status.dataset.role = "status";
+        article.appendChild(status);
+
+        article.appendChild(row("نوع", "TXT", false));
+        article.appendChild(row("نام", ch.txt_name || "", true, "name"));
+        article.appendChild(row("مقدار", ch.txt_value || "", true, "value"));
+
+        const foundBox = document.createElement("div");
+        foundBox.className = "dns-found-box";
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = "الان در DNS:";
+        const found = document.createElement("div");
+        found.className = "dns-found-values";
+        found.dataset.role = "found";
+        foundBox.append(label, found);
+        article.appendChild(foundBox);
+
+        paintCard(article, ch);
+        return article;
+    }
+
+    function row(labelText, valueText, copy, role) {
+        const wrap = document.createElement("div");
+        wrap.className = "record-row";
+        const label = document.createElement("span");
+        label.className = "record-label";
+        label.textContent = labelText;
+        const value = document.createElement("span");
+        value.className = "record-value";
+        if (labelText === "نوع") value.style.flex = "0 0 auto";
+        if (role) value.dataset.role = role;
+        value.textContent = valueText;
+        wrap.append(label, value);
+        if (copy) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "copy-btn";
+            btn.dataset.copy = role;
+            btn.textContent = "کپی";
+            wrap.appendChild(btn);
+        }
+        return wrap;
+    }
+
+    function paintCard(card, ch) {
+        const status = ch.dns_status || "missing";
+        const badge = card.querySelector("[data-role=status]");
+        badge.className = "dns-status dns-status-" + status;
+        badge.textContent = DNS_LABEL[status] || status;
+        card.classList.toggle("is-ok", status === "found");
+        const found = card.querySelector("[data-role=found]");
+        const values = ch.dns_found || [];
+        found.textContent = values.length ? values.join(" | ") : "(هیچ مقداری یافت نشد)";
+    }
+
+    function applyChallenges(challenges) {
+        const keys = challenges.map((ch) => ch.txt_value);
+        const current = [...list.querySelectorAll("[data-key]")].map((el) => el.dataset.key);
+        const same = keys.length === current.length && keys.every((key, i) => key === current[i]);
+        if (!same) {
+            if (selectionInside(list)) return;
+            const known = new Set(current);
+            list.replaceChildren(...challenges.map((ch) => cardElement(ch, !known.has(ch.txt_value) && current.length > 0)));
+        } else {
+            challenges.forEach((ch) => {
+                const card = list.querySelector(`[data-key="${CSS.escape(ch.txt_value)}"]`);
+                if (card) paintCard(card, ch);
+            });
+        }
+
+        const found = challenges.filter((ch) => ch.dns_status === "found").length;
+        const total = challenges.length;
+        const bar = document.getElementById("dns-bar");
+        bar.style.width = total ? `${Math.round((found / total) * 100)}%` : "0";
+        setProgress(found, total);
+        const names = [...new Set(challenges.map((ch) => ch.txt_name).filter(Boolean))];
+        const lead = document.getElementById("dns-lead");
+        lead.replaceChildren();
+        if (challenges.length > 1 && names.length === 1) {
+            lead.append("هر دو مقدار را همزمان روی ");
+            const name = document.createElement("bdi");
+            name.dir = "ltr";
+            name.textContent = names[0];
+            lead.append(name, " بگذارید؛ دو رکورد TXT جدا با همین نام.");
+        } else if (challenges.length > 1) {
+            lead.textContent = "همه مقدارهای زیر را همزمان در DNS اضافه کنید.";
+        } else {
+            lead.textContent = "این رکورد TXT را در DNS دامنه اضافه کنید.";
+        }
+    }
+
+    function setProgress(found, total) {
+        const progress = document.getElementById("dns-progress");
+        progress.replaceChildren();
+        if (!total) return;
+        const count = document.createElement("bdi");
+        count.dir = "ltr";
+        count.textContent = `${found} از ${total}`;
+        progress.append(count, " رکورد در DNS دیده شد");
+    }
+
+    function runningText(data) {
+        if (data.status === "renewing") return "در حال تمدید گواهی. همین صفحه خودش به‌روز می‌شود.";
+        if (data.status === "issuing" || data.status === "verifying") return "در حال صدور گواهی. همین صفحه خودش به‌روز می‌شود.";
+        if (!data.challenges || !data.challenges.length) return "در حال آماده‌کردن رکوردهای TXT. لازم نیست صفحه را رفرش کنید.";
+        return "منتظر تأیید DNS. وضعیت رکوردها خودکار بررسی می‌شود.";
+    }
+
+    function apply(data) {
+        const badge = document.getElementById("status-badge");
+        badge.textContent = data.status_label || data.status;
+        badge.className = "badge badge-" + (data.status_color || "secondary");
+
+        const expiry = document.getElementById("expiry");
+        if (data.cert_expires_at) {
+            document.getElementById("expiry-value").textContent = String(data.cert_expires_at).slice(0, 19);
+            expiry.hidden = false;
+        }
+
+        const running = document.getElementById("running-alert");
+        running.hidden = !data.is_running;
+        document.getElementById("running-text").textContent = runningText(data);
+
+        const showDns = (data.challenges || []).length > 0 && (data.status === "pending_dns" || data.status === "renewing");
+        document.getElementById("dns-card").hidden = !showDns;
+        if (showDns) {
+            applyChallenges(data.challenges);
+            const waiting = !data.awaiting_user;
+            document.getElementById("awaiting-alert").hidden = !waiting;
+            verifyBtn.disabled = waiting;
+            verifyHint.textContent = waiting
+                ? "دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود."
+                : "بعد از سبز شدن رکوردها این دکمه را بزنید.";
+        }
+
+        document.getElementById("active-card").hidden = data.status !== "active";
+        document.getElementById("failed-card").hidden = data.status !== "failed";
+        const errorBox = document.getElementById("error-box");
+        if (data.error_message) {
+            errorBox.hidden = false;
+            errorBox.textContent = data.error_message;
+        } else if (data.status !== "failed") {
+            errorBox.hidden = true;
+        }
+
+        const busy = !!data.is_running;
+        document.getElementById("renew-btn").disabled = busy;
+        document.getElementById("retry-btn").disabled = busy;
+        document.getElementById("delete-btn").disabled = busy;
+
+        const stamp = new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        document.getElementById("live-stamp").textContent = "به‌روز شد " + stamp;
+        document.getElementById("live-dot").classList.remove("is-off");
+    }
+
+    function nextDelay(data) {
+        if (!data) return 4000;
+        if (data.status === "active" && !data.is_running) return 20000;
+        const challenges = data.challenges || [];
+        if (!challenges.length || !data.awaiting_user) return 2000;
+        if (data.status === "pending_dns" || data.status === "renewing") return 8000;
+        return 3000;
+    }
+
+    async function tick() {
+        if (document.hidden) {
+            timer = setTimeout(tick, 2000);
+            return;
+        }
+        let delay = 5000;
+        try {
+            const res = await fetch(`/domains/${domainId}/live`, { headers: { Accept: "application/json" }, cache: "no-store" });
+            if (res.status === 404) {
+                location.href = "/";
+                return;
+            }
+            if (!res.ok) throw new Error("status");
+            const data = await res.json();
+            apply(data);
+            delay = nextDelay(data);
+        } catch (err) {
+            document.getElementById("live-dot").classList.add("is-off");
+            document.getElementById("live-stamp").textContent = "ارتباط قطع شد، تلاش دوباره";
+        }
+        timer = setTimeout(tick, delay);
+    }
+
+    const initial = {{ domain.challenges | length }};
+    if (initial) {
+        const found = {{ domain.challenges | selectattr('dns_status', 'equalto', 'found') | list | length }};
+        document.getElementById("dns-bar").style.width = `${Math.round((found / initial) * 100)}%`;
+        setProgress(found, initial);
+        verifyBtn.disabled = {{ 'true' if not domain.awaiting_user else 'false' }};
+        verifyHint.textContent = verifyBtn.disabled
+            ? "دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود."
+            : "بعد از سبز شدن رکوردها این دکمه را بزنید.";
+    }
+
+    timer = setTimeout(tick, 1500);
+})();
 </script>
-{% elif domain.challenges and domain.status in ('pending_dns', 'renewing') %}
-<script>
-    // Refresh DNS status periodically
-    setTimeout(() => location.reload(), 15000);
-</script>
-{% elif domain.is_running %}
-<script>
-    setTimeout(() => location.reload(), 5000);
-</script>
-{% endif %}
 {% endblock %}

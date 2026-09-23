@@ -32,9 +32,9 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 980px;
             margin: 0 auto;
-            padding: 2rem 1.5rem;
+            padding: 2rem 1.5rem 3rem;
         }
 
         header {
@@ -74,7 +74,8 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03);
         }
 
         .card h2 {
@@ -166,6 +167,18 @@
         .btn-secondary:hover { background: var(--border); }
 
         .btn-sm { padding: 0.5rem 0.875rem; font-size: 0.85rem; }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .btn:focus-visible,
+        .copy-btn:focus-visible,
+        a:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
 
         .badge {
             display: inline-block;
@@ -389,9 +402,223 @@
             color: #fca5a5;
         }
 
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .back-link:hover { color: var(--text); }
+
+        .hero-top,
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .eyebrow {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .hero-copy { min-width: 0; }
+
+        .domain-title {
+            margin: 0;
+            font-size: 1.55rem;
+            letter-spacing: -0.02em;
+        }
+
+        bdi[dir="ltr"] { unicode-bidi: isolate; }
+
+        .coverage {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.35rem;
+        }
+
+        .coverage code {
+            direction: ltr;
+            unicode-bidi: isolate;
+        }
+
+        .hero-side {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+
+        .live-dot {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+        }
+
+        .live-dot::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+            animation: pulse 1.8s ease-out infinite;
+        }
+
+        .live-dot.is-off::before {
+            background: var(--warning);
+            animation: none;
+        }
+
+        @keyframes pulse {
+            70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+        }
+
+        .meta-line {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+        }
+
+        .progress-wrap { margin: 1rem 0 0.25rem; }
+
+        .progress-line {
+            height: 6px;
+            background: var(--surface2);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-line > span {
+            display: block;
+            height: 100%;
+            background: var(--success);
+            width: 0;
+            transition: width 0.35s ease;
+        }
+
+        .progress-label {
+            margin-top: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .help {
+            margin: 0.75rem 0 1rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .help summary {
+            cursor: pointer;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .challenge-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .challenge-grid .record-box { margin: 0; height: 100%; }
+
+        .challenge-for { margin-bottom: 0.6rem; }
+
+        .record-box.is-ok { border-color: rgba(34, 197, 94, 0.55); }
+
+        .record-box.is-fresh {
+            animation: fresh 1.2s ease;
+        }
+
+        @keyframes fresh {
+            from { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.45); }
+            to { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+
+        .action-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-top: 0.25rem;
+            margin-bottom: 1rem;
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(to top, var(--surface) 70%, transparent);
+            padding: 0.85rem 0 0.15rem;
+            z-index: 2;
+        }
+
+        .hint {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        .quiet-card {
+            border-color: transparent;
+            background: transparent;
+            box-shadow: none;
+            padding-inline: 0;
+        }
+
+        .domain-main {
+            min-width: 0;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .domain-main:hover .domain-name { color: var(--primary); }
+
+        .domain-item.is-busy { border-color: rgba(6, 182, 212, 0.45); }
+
+        .toast {
+            position: fixed;
+            bottom: 1.25rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            z-index: 20;
+        }
+
+        [hidden] { display: none !important; }
+
+        @media (max-width: 640px) {
+            .container { padding: 1rem 0.85rem 2rem; }
+            .card { padding: 1rem; }
+            .domain-title { font-size: 1.25rem; }
+            header h1 { font-size: 1.2rem; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .spinner,
+            .live-dot::before,
+            .record-box.is-fresh,
+            .progress-line > span {
+                animation: none;
+                transition: none;
+            }
+        }
+
         footer {
             text-align: center;
-            padding: 2rem 0;
+            padding: 2rem 0 0;
             color: var(--text-muted);
             font-size: 0.85rem;
         }
@@ -421,11 +648,37 @@
 
     <script>
         function copyText(text, btn) {
-            navigator.clipboard.writeText(text).then(() => {
-                const orig = btn.textContent;
-                btn.textContent = 'کپی شد ✓';
-                setTimeout(() => btn.textContent = orig, 2000);
-            });
+            const done = () => {
+                if (btn) {
+                    const orig = btn.textContent;
+                    btn.textContent = 'کپی شد';
+                    setTimeout(() => { btn.textContent = orig; }, 1600);
+                }
+                const old = document.querySelector('.toast');
+                if (old) old.remove();
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.textContent = 'کپی شد';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 1600);
+            };
+            const fallback = () => {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.setAttribute('readonly', '');
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                try { document.execCommand('copy'); } catch (err) {}
+                area.remove();
+                done();
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(done).catch(fallback);
+            } else {
+                fallback();
+            }
         }
     </script>
     {% block extra_scripts %}{% endblock %}

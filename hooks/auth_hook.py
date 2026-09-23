@@ -51,11 +51,46 @@ conn.execute(
 conn.commit()
 conn.close()
 
+def _load_challenges() -> list[dict]:
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT challenges FROM domains WHERE id = ?", (domain_id,)).fetchone()
+    conn.close()
+    if not row or not row["challenges"]:
+        return []
+    try:
+        return json.loads(row["challenges"])
+    except json.JSONDecodeError:
+        return []
+
+
+def _all_challenges_present() -> bool:
+    items = _load_challenges()
+    if not items:
+        return False
+    return all(txt_has_value(ch["txt_name"], ch["txt_value"]) for ch in items)
+
+
+# Certbot calls this hook once per challenge, then validates all of them.
+# Exit immediately on earlier challenges so the next TXT value is issued now.
+try:
+    remaining = int(os.environ.get("CERTBOT_REMAINING_CHALLENGES", "0"))
+except ValueError:
+    remaining = 0
+awaiting_user = remaining == 0
+
 state_path = os.path.join(STATE_DIR, f"domain_{domain_id}.json")
 os.makedirs(STATE_DIR, exist_ok=True)
 with open(state_path, "w") as f:
-    json.dump({"domain_id": int(domain_id), "verified": False, "current": domain}, f)
+    json.dump({
+        "domain_id": int(domain_id),
+        "verified": False,
+        "current": domain,
+        "awaiting_user": awaiting_user,
+    }, f)
 
+if not awaiting_user:
+    sys.exit(0)
 
 timeout = 1800
 elapsed = 0
@@ -64,10 +99,10 @@ while elapsed < timeout:
         with open(state_path) as f:
             state = json.load(f)
         if state.get("verified"):
-            if txt_has_value(txt_name, validation):
+            if _all_challenges_present():
                 sys.exit(0)
-            # reset verify flag if DNS not ready yet
             state["verified"] = False
+            state["awaiting_user"] = True
             with open(state_path, "w") as f:
                 json.dump(state, f)
     time.sleep(2)
