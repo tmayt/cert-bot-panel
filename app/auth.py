@@ -1,6 +1,8 @@
 import hmac
 import os
 import secrets
+import threading
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -15,6 +17,21 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip() or secrets.token_hex(32)
 
 PUBLIC_PATHS = {"/login", "/logout"}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+# 0 disables the limit. Window is how long failed attempts are remembered.
+LOGIN_MAX_ATTEMPTS = _env_int("LOGIN_MAX_ATTEMPTS", 5)
+LOGIN_WINDOW_SECONDS = max(_env_int("LOGIN_WINDOW_SECONDS", 900), 1)
 
 
 def credentials_configured() -> bool:
@@ -58,6 +75,72 @@ def safe_next_url(next_url: str | None) -> str:
 
 def is_public_path(path: str) -> bool:
     return path in PUBLIC_PATHS or path.startswith("/api")
+
+
+def client_address(request: Request) -> str:
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def format_retry_wait(seconds: int) -> str:
+    seconds = max(int(seconds), 1)
+    if seconds < 60:
+        return f"{seconds} ثانیه"
+    minutes = (seconds + 59) // 60
+    return f"{minutes} دقیقه"
+
+
+def lock_message(seconds: int) -> str:
+    return f"تلاش‌های ورود موقتاً محدود شده است. حدود {format_retry_wait(seconds)} دیگر دوباره امتحان کنید."
+
+
+class LoginRateLimiter:
+    """Failed login attempts per client address, inside one process."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._failures: dict[str, list[float]] = {}
+
+    def _prune(self, key: str, now: float) -> list[float]:
+        kept = [stamp for stamp in self._failures.get(key, []) if now - stamp < LOGIN_WINDOW_SECONDS]
+        if kept:
+            self._failures[key] = kept
+        else:
+            self._failures.pop(key, None)
+        return kept
+
+    def _wait(self, stamps: list[float], now: float) -> int:
+        if LOGIN_MAX_ATTEMPTS <= 0 or len(stamps) < LOGIN_MAX_ATTEMPTS:
+            return 0
+        remaining = int(LOGIN_WINDOW_SECONDS - (now - stamps[0])) + 1
+        return max(remaining, 1)
+
+    def retry_after(self, key: str) -> int:
+        if LOGIN_MAX_ATTEMPTS <= 0:
+            return 0
+        now = time.monotonic()
+        with self._lock:
+            return self._wait(self._prune(key, now), now)
+
+    def record_failure(self, key: str) -> int:
+        if LOGIN_MAX_ATTEMPTS <= 0:
+            return 0
+        now = time.monotonic()
+        with self._lock:
+            stamps = self._prune(key, now)
+            if len(stamps) >= LOGIN_MAX_ATTEMPTS:
+                return self._wait(stamps, now)
+            stamps.append(now)
+            self._failures[key] = stamps
+            return self._wait(stamps, now)
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._failures.pop(key, None)
+
+
+login_rate_limiter = LoginRateLimiter()
 
 
 async def require_login(request: Request, call_next):

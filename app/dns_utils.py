@@ -3,7 +3,8 @@ import dns.resolver
 
 def get_txt_values(txt_name: str) -> list[str]:
     """Return all TXT values for a name (one entry per DNS RR, strings joined per RR)."""
-    resolver = dns.resolver.Resolver()
+    resolver = dns.resolver.Resolver(configure=False)
+    resolver.nameservers = ["8.8.8.8", "8.8.4.4"]
     resolver.lifetime = 10
     values: list[str] = []
     answers = resolver.resolve(txt_name, "TXT")

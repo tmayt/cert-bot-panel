@@ -17,6 +17,7 @@ from app.certbot_service import (
     issue_certificate,
     read_state,
     renew_certificate,
+    retry_certificate,
 )
 from app.dns_checker import inspect_challenges, verify_domain
 
@@ -33,6 +34,7 @@ STATUS_LABELS = {
     "active": "فعال",
     "failed": "خطا",
     "renewing": "در حال تمدید",
+    "dns_rejected": "رد DNS",
 }
 
 STATUS_COLORS = {
@@ -42,6 +44,7 @@ STATUS_COLORS = {
     "active": "success",
     "failed": "danger",
     "renewing": "info",
+    "dns_rejected": "danger",
 }
 
 router = APIRouter(prefix="/api")
@@ -83,6 +86,18 @@ def summarize_domain(domain: dict) -> dict:
     }
 
 
+def wizard_step(status: str, challenges: list) -> int:
+    if status == "active":
+        return 4
+    if status in ("verifying", "failed"):
+        return 3
+    if status == "dns_rejected":
+        return 2
+    if challenges and status in ("pending_dns", "renewing", "issuing"):
+        return 2
+    return 1
+
+
 def serialize_domain(domain: dict) -> dict:
     d = dict(domain)
     d["verified"] = bool(d.get("verified"))
@@ -98,12 +113,14 @@ def serialize_domain(domain: dict) -> dict:
     state = read_state(d["id"]) or {}
     d["waiting_challenge"] = state.get("current")
     d["awaiting_user"] = bool(state.get("awaiting_user"))
+    d["values_refreshed"] = bool(state.get("values_refreshed"))
     challenges = db.get_challenges(d["id"])
     d["challenges"] = challenges
-    if challenges and d["status"] in ("pending_dns", "renewing"):
+    if challenges and d["status"] in ("pending_dns", "renewing", "dns_rejected"):
         d["challenges"] = inspect_challenges(challenges)
     if d["status"] == "active" and not d.get("cert_expires_at"):
         d["cert_expires_at"] = get_cert_expiry(d["domain"])
+    d["wizard_step"] = wizard_step(d["status"], d["challenges"])
     return d
 
 
@@ -190,7 +207,7 @@ async def api_retry(domain_id: int):
         raise HTTPException(404, "دامنه یافت نشد")
     if is_running(domain_id):
         raise HTTPException(400, "عملیات دیگری در حال اجراست")
-    issue_certificate(domain_id, domain["domain"])
+    retry_certificate(domain_id, domain["domain"])
     return serialize_domain(db.get_domain(domain_id))
 
 

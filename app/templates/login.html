@@ -5,8 +5,8 @@
 {% block content %}
 <div class="card login-card">
     <h2>ورود ادمین</h2>
-    <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:1.25rem;">
-        برای دسترسی به پنل، با حساب ادمین وارد شوید.
+    <p class="hint" style="margin-bottom:1.25rem;">
+        برای مدیریت گواهی‌ها با حساب ادمین وارد شوید.
     </p>
 
     {% if error %}
@@ -16,10 +16,10 @@
     <form action="/login" method="post" class="login-form">
         <input type="hidden" name="next" value="{{ next_url }}">
         <label class="field-label" for="username">نام کاربری</label>
-        <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+        <input id="username" type="text" name="username" autocomplete="username" required {% if not locked %}autofocus{% endif %} {% if locked %}disabled{% endif %}>
         <label class="field-label" for="password">رمز عبور</label>
-        <input id="password" type="password" name="password" autocomplete="current-password" required>
-        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">ورود</button>
+        <input id="password" type="password" name="password" autocomplete="current-password" required {% if locked %}disabled{% endif %}>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;" {% if locked %}disabled{% endif %}>ورود</button>
     </form>
 </div>
 {% endblock %}

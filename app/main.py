@@ -14,14 +14,17 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from app.api import DOMAIN_RE, router as api_router, serialize_domain, summarize_domain
 from app.auth import (
     SESSION_SECRET,
+    client_address,
     credentials_configured,
+    lock_message,
+    login_rate_limiter,
     login_user,
     logout_user,
     require_login,
     safe_next_url,
     verify_credentials,
 )
-from app.certbot_service import get_cert_files, is_running, issue_certificate, renew_certificate
+from app.certbot_service import get_cert_files, is_running, issue_certificate, renew_certificate, retry_certificate
 from app.database import init_db
 from app.dns_checker import verify_domain
 
@@ -44,13 +47,22 @@ async def login_page(request: Request, next: str = "/"):
     if request.session.get("authenticated"):
         return RedirectResponse(safe_next_url(next), status_code=303)
     error = None
-    if not credentials_configured():
+    locked = False
+    retry_after = login_rate_limiter.retry_after(client_address(request))
+    if retry_after:
+        locked = True
+        error = lock_message(retry_after)
+    elif not credentials_configured():
         error = "حساب ادمین در فایل .env تنظیم نشده است."
-    return templates.TemplateResponse("login.html", {
+    response = templates.TemplateResponse("login.html", {
         "request": request,
         "next_url": safe_next_url(next),
         "error": error,
-    })
+        "locked": locked,
+    }, status_code=429 if locked else 200)
+    if locked:
+        response.headers["Retry-After"] = str(retry_after)
+    return response
 
 
 @app.post("/login")
@@ -60,14 +72,33 @@ async def login(
     password: str = Form(...),
     next: str = Form("/"),
 ):
+    key = client_address(request)
+    retry_after = login_rate_limiter.retry_after(key)
+    if retry_after:
+        response = templates.TemplateResponse("login.html", {
+            "request": request,
+            "next_url": safe_next_url(next),
+            "error": lock_message(retry_after),
+            "locked": True,
+        }, status_code=429)
+        response.headers["Retry-After"] = str(retry_after)
+        return response
     if verify_credentials(username.strip(), password):
+        login_rate_limiter.clear(key)
         login_user(request)
         return RedirectResponse(safe_next_url(next), status_code=303)
-    return templates.TemplateResponse("login.html", {
+    retry_after = login_rate_limiter.record_failure(key)
+    locked = retry_after > 0
+    error = lock_message(retry_after) if locked else "نام کاربری یا رمز عبور نادرست است."
+    response = templates.TemplateResponse("login.html", {
         "request": request,
         "next_url": safe_next_url(next),
-        "error": "نام کاربری یا رمز عبور نادرست است.",
-    }, status_code=401)
+        "error": error,
+        "locked": locked,
+    }, status_code=429 if locked else 401)
+    if locked:
+        response.headers["Retry-After"] = str(retry_after)
+    return response
 
 
 @app.post("/logout")
@@ -179,7 +210,7 @@ async def retry(domain_id: int):
         raise HTTPException(404, "دامنه یافت نشد")
     if is_running(domain_id):
         raise HTTPException(400, "عملیات دیگری در حال اجراست")
-    issue_certificate(domain_id, domain["domain"])
+    retry_certificate(domain_id, domain["domain"])
     return RedirectResponse(f"/domains/{domain_id}", status_code=303)
 
 

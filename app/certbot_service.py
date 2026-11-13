@@ -93,8 +93,46 @@ def _build_certbot_cmd(domain: str, domain_id: int, renew: bool = False) -> list
     return cmd
 
 
+def _is_dns_rejection(output: str) -> bool:
+    text = (output or "").lower()
+    markers = (
+        "dns problem",
+        "no txt record",
+        "incorrect txt",
+        "nxdomain",
+        "servfail",
+        "challenge failed",
+        "some challenges have failed",
+        "unauthorized",
+        "secondary validation",
+        "timeout waiting for dns",
+        "dns validation",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _finish_failure(domain_id: int, output: str) -> None:
+    message = (output or "certbot failed")[-2000:]
+    current = db.get_domain(domain_id) or {}
+    challenges = db.get_challenges(domain_id)
+    same_step = bool(challenges) and (
+        _is_dns_rejection(output) or current.get("status") == "verifying"
+    )
+    if same_step:
+        db.mark_dns_rejected(domain_id, message)
+    else:
+        db.mark_failed(domain_id, message)
+
+
 def _run_certbot(domain_id: int, domain: str, renew: bool = False) -> None:
-    write_state(domain_id, {"domain_id": domain_id, "domain": domain, "verified": False})
+    write_state(domain_id, {
+        "domain_id": domain_id,
+        "domain": domain,
+        "verified": False,
+        "awaiting_user": False,
+        "challenges_reset": False,
+        "renew": renew,
+    })
 
     env = os.environ.copy()
     env["DOMAIN_ID"] = str(domain_id)
@@ -118,7 +156,7 @@ def _run_certbot(domain_id: int, domain: str, renew: bool = False) -> None:
             expires = get_cert_expiry(domain)
             db.mark_active(domain_id, expires)
         else:
-            db.mark_failed(domain_id, output[-2000:] if output else "certbot failed")
+            _finish_failure(domain_id, output or "")
     except Exception as e:
         db.mark_failed(domain_id, str(e))
     finally:
@@ -139,6 +177,21 @@ def renew_certificate(domain_id: int, domain: str) -> None:
         target=_run_certbot, args=(domain_id, domain, True), daemon=True
     )
     thread.start()
+
+
+def retry_certificate(domain_id: int, domain: str) -> None:
+    """Retry a Let's Encrypt DNS rejection without restarting issuance from scratch."""
+    current = db.get_domain(domain_id)
+    challenges = db.get_challenges(domain_id)
+    if current and current["status"] == "dns_rejected" and challenges:
+        db.mark_dns_retry(domain_id)
+        renew = bool(current.get("cert_expires_at") or get_cert_files(domain))
+        thread = threading.Thread(
+            target=_run_certbot, args=(domain_id, domain, renew), daemon=True
+        )
+        thread.start()
+        return
+    issue_certificate(domain_id, domain)
 
 
 def is_running(domain_id: int) -> bool:

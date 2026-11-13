@@ -23,33 +23,25 @@ if not domain or not validation or not domain_id:
     sys.exit(1)
 
 txt_name = f"_acme-challenge.{domain.removeprefix('*.')}"
+state_path = os.path.join(STATE_DIR, f"domain_{domain_id}.json")
 
-conn = sqlite3.connect(DATABASE_PATH)
-conn.row_factory = sqlite3.Row
-row = conn.execute("SELECT challenges FROM domains WHERE id = ?", (domain_id,)).fetchone()
 
-challenges = []
-if row and row["challenges"]:
+def _read_state() -> dict:
+    if not os.path.exists(state_path):
+        return {}
     try:
-        challenges = json.loads(row["challenges"])
-    except json.JSONDecodeError:
-        challenges = []
+        with open(state_path) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
 
-challenges.append({
-    "certbot_domain": domain,
-    "txt_name": txt_name,
-    "txt_value": validation,
-})
 
-conn.execute(
-    """UPDATE domains SET
-        challenges = ?, txt_name = ?, txt_value = ?,
-        status = 'pending_dns', verified = 0
-    WHERE id = ?""",
-    (json.dumps(challenges), txt_name, validation, domain_id),
-)
-conn.commit()
-conn.close()
+def _write_state(state: dict) -> None:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(state_path, "w") as f:
+        json.dump(state, f)
+
 
 def _load_challenges() -> list[dict]:
     conn = sqlite3.connect(DATABASE_PATH)
@@ -64,12 +56,49 @@ def _load_challenges() -> list[dict]:
         return []
 
 
+def _mark_pending() -> None:
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.execute(
+        "UPDATE domains SET status = 'pending_dns', verified = 0 WHERE id = ?",
+        (domain_id,),
+    )
+    conn.commit()
+    conn.close()
+
+
 def _all_challenges_present() -> bool:
     items = _load_challenges()
     if not items:
         return False
     return all(txt_has_value(ch["txt_name"], ch["txt_value"]) for ch in items)
 
+
+state = _read_state()
+previous = _load_challenges()
+fresh_run = not state.get("challenges_reset")
+if fresh_run:
+    challenges = []
+    if previous:
+        state["values_refreshed"] = True
+else:
+    challenges = previous
+
+challenges.append({
+    "certbot_domain": domain,
+    "txt_name": txt_name,
+    "txt_value": validation,
+})
+
+conn = sqlite3.connect(DATABASE_PATH)
+conn.execute(
+    """UPDATE domains SET
+        challenges = ?, txt_name = ?, txt_value = ?,
+        status = 'pending_dns', verified = 0, error_message = NULL
+    WHERE id = ?""",
+    (json.dumps(challenges), txt_name, validation, domain_id),
+)
+conn.commit()
+conn.close()
 
 # Certbot calls this hook once per challenge, then validates all of them.
 # Exit immediately on earlier challenges so the next TXT value is issued now.
@@ -79,15 +108,12 @@ except ValueError:
     remaining = 0
 awaiting_user = remaining == 0
 
-state_path = os.path.join(STATE_DIR, f"domain_{domain_id}.json")
-os.makedirs(STATE_DIR, exist_ok=True)
-with open(state_path, "w") as f:
-    json.dump({
-        "domain_id": int(domain_id),
-        "verified": False,
-        "current": domain,
-        "awaiting_user": awaiting_user,
-    }, f)
+state["domain_id"] = int(domain_id)
+state["verified"] = False
+state["current"] = domain
+state["awaiting_user"] = awaiting_user
+state["challenges_reset"] = True
+_write_state(state)
 
 if not awaiting_user:
     sys.exit(0)
@@ -95,16 +121,14 @@ if not awaiting_user:
 timeout = 1800
 elapsed = 0
 while elapsed < timeout:
-    if os.path.exists(state_path):
-        with open(state_path) as f:
-            state = json.load(f)
-        if state.get("verified"):
-            if _all_challenges_present():
-                sys.exit(0)
-            state["verified"] = False
-            state["awaiting_user"] = True
-            with open(state_path, "w") as f:
-                json.dump(state, f)
+    state = _read_state()
+    if state.get("verified"):
+        if _all_challenges_present():
+            sys.exit(0)
+        state["verified"] = False
+        state["awaiting_user"] = True
+        _write_state(state)
+        _mark_pending()
     time.sleep(2)
     elapsed += 2
 

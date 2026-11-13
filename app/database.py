@@ -146,6 +146,16 @@ def mark_failed(domain_id: int, error: str) -> None:
     update_domain(domain_id, status="failed", error_message=error, verified=0)
 
 
+def mark_dns_rejected(domain_id: int, error: str) -> None:
+    """Let's Encrypt rejected the current TXT values. Keep them for this same step."""
+    update_domain(domain_id, status="dns_rejected", error_message=error, verified=0)
+
+
+def mark_dns_retry(domain_id: int) -> None:
+    """Resume the DNS step. Challenges stay until the new certbot run replaces them."""
+    update_domain(domain_id, status="pending_dns", verified=0)
+
+
 def mark_issuing(domain_id: int) -> None:
     update_domain(
         domain_id,

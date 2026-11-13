@@ -4,16 +4,24 @@
 
 {% block content %}
 <div class="card">
-    <h2>دامنه جدید</h2>
-    <p class="hint" style="margin-bottom:1rem;">
-        گواهی Wildcard برای <code style="direction:ltr">*.example.com</code> و <code style="direction:ltr">example.com</code> صادر می‌شود.
+    <div class="section-head">
+        <h2 style="margin:0;">صدور گواهی جدید</h2>
+    </div>
+    <ol class="wizard" aria-label="مراحل صدور">
+        <li class="is-current" aria-current="step"><span class="wizard-index">۱</span><span>آماده‌سازی</span></li>
+        <li class="is-upcoming"><span class="wizard-index">۲</span><span>رکورد DNS</span></li>
+        <li class="is-upcoming"><span class="wizard-index">۳</span><span>تأیید نهایی</span></li>
+        <li class="is-upcoming"><span class="wizard-index">۴</span><span>گواهی</span></li>
+    </ol>
+    <p class="hint" style="margin:0.9rem 0 1rem;">
+        دامنه را وارد کنید. گواهی Wildcard برای <bdi dir="ltr">*.example.com</bdi> و <bdi dir="ltr">example.com</bdi> صادر می‌شود و مرحله بعد در همان صفحه ادامه پیدا می‌کند.
     </p>
     <form action="/domains/add" method="post" id="add-form">
         <div class="form-group">
             <input type="text" name="domain" placeholder="example.com" required
                    pattern="[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+"
                    title="مثال: example.com" autocomplete="off">
-            <button type="submit" class="btn btn-primary" id="add-btn">شروع صدور گواهی</button>
+            <button type="submit" class="btn btn-primary" id="add-btn">شروع مرحله بعد</button>
         </div>
     </form>
 </div>
@@ -39,7 +47,7 @@
                 </div>
             </a>
             <div class="domain-actions">
-                <a href="/domains/{{ d.id }}" class="btn btn-secondary btn-sm">جزئیات</a>
+                <a href="/domains/{{ d.id }}" class="btn btn-secondary btn-sm" data-role="open">{% if d.status == 'active' %}جزئیات{% else %}ادامه{% endif %}</a>
                 {% if d.status == 'active' %}
                 <form action="/domains/{{ d.id }}/renew" method="post" data-role="renew">
                     <button type="submit" class="btn btn-warning btn-sm" {% if d.is_running %}disabled{% endif %}>تمدید</button>
@@ -110,6 +118,8 @@
                 expiry.hidden = false;
             }
             row.querySelector("[data-role=busy]").hidden = !d.is_running;
+            const open = row.querySelector("[data-role=open]");
+            if (open) open.textContent = d.status === "active" ? "جزئیات" : "ادامه";
             const renew = row.querySelector("[data-role=renew] button");
             if (renew) renew.disabled = !!d.is_running;
             const download = row.querySelector("[data-role=download]");

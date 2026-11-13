@@ -3,6 +3,7 @@
 {% block title %}{{ domain.domain }} — پنل Certbot{% endblock %}
 
 {% block content %}
+{% set step = domain.wizard_step %}
 <a class="back-link" href="/">بازگشت به لیست</a>
 
 {% if request.query_params.get('success') %}
@@ -12,10 +13,10 @@
 <div class="alert alert-danger">{{ request.query_params.get('error') }}</div>
 {% endif %}
 
-<div class="card">
+<div class="card hero-card">
     <div class="hero-top">
         <div class="hero-copy">
-            <p class="eyebrow">گواهی Wildcard</p>
+            <p class="eyebrow">صدور گواهی Wildcard</p>
             <h2 class="domain-title"><bdi dir="ltr">{{ domain.domain }}</bdi></h2>
             <p class="coverage">
                 پوشش <bdi dir="ltr">*.{{ domain.domain }}</bdi>
@@ -28,32 +29,45 @@
             <span id="live-dot" class="live-dot"><span id="live-stamp">در حال همگام‌سازی</span></span>
         </div>
     </div>
-
     <p id="expiry" class="meta-line" {% if not domain.cert_expires_at %}hidden{% endif %}>
         انقضا: <span id="expiry-value" style="direction:ltr;display:inline-block">{% if domain.cert_expires_at %}{{ domain.cert_expires_at[:19] }}{% endif %}</span>
     </p>
 
-    <div id="running-alert" class="alert alert-info" style="margin-top:1rem;" {% if not domain.is_running %}hidden{% endif %}>
+    <ol class="wizard" id="wizard" aria-label="مراحل صدور">
+        {% for n, label, digit in [(1, 'آماده‌سازی', '۱'), (2, 'رکورد DNS', '۲'), (3, 'تأیید نهایی', '۳'), (4, 'گواهی', '۴')] %}
+        <li data-step="{{ n }}" class="{% if step == n %}is-current{% elif step > n %}is-done{% else %}is-upcoming{% endif %}"{% if step == n %} aria-current="step"{% endif %}>
+            <span class="wizard-index">{{ digit }}</span>
+            <span>{{ label }}</span>
+        </li>
+        {% endfor %}
+    </ol>
+</div>
+
+<section class="card" id="step-prepare" {% if step != 1 %}hidden{% endif %}>
+    <div class="section-head">
+        <h2>مرحله ۱ — آماده‌سازی</h2>
+    </div>
+    <div class="alert alert-info">
         <span class="spinner"></span>
-        <span id="running-text">
+        <span id="prepare-text">
             {% if domain.status == 'renewing' %}
-            در حال تمدید گواهی. همین صفحه خودش به‌روز می‌شود.
-            {% elif domain.status in ('issuing', 'verifying') %}
-            در حال صدور گواهی. همین صفحه خودش به‌روز می‌شود.
+            در حال شروع تمدید و گرفتن رکوردهای DNS تازه.
             {% else %}
-            در حال آماده‌کردن رکوردهای TXT. لازم نیست صفحه را رفرش کنید.
+            در حال گرفتن چالش DNS از Let's Encrypt. همین صفحه خودش به‌روز می‌شود.
             {% endif %}
         </span>
     </div>
-</div>
+</section>
 
-<div class="card" id="dns-card" {% if not (domain.challenges and domain.status in ('pending_dns', 'renewing')) %}hidden{% endif %}>
+<section class="card" id="step-dns" {% if step != 2 %}hidden{% endif %}>
     <div class="section-head">
-        <h2>رکوردهای DNS</h2>
+        <h2>مرحله ۲ — رکورد DNS</h2>
     </div>
     <p id="dns-lead" class="hint">
         {% set names = domain.challenges | map(attribute='txt_name') | unique | list %}
-        {% if domain.challenges | length > 1 and names | length == 1 %}
+        {% if domain.status == 'dns_rejected' %}
+        این مقدارها رد شده‌اند. تلاش مجدد، مقدار تازه را در همین مرحله جایگزین می‌کند.
+        {% elif domain.challenges | length > 1 and names | length == 1 %}
         هر دو مقدار را همزمان روی <bdi dir="ltr">{{ names[0] }}</bdi> بگذارید؛ دو رکورد TXT جدا با همین نام.
         {% elif domain.challenges | length > 1 %}
         همه مقدارهای زیر را همزمان در DNS اضافه کنید.
@@ -61,32 +75,49 @@
         این رکورد TXT را در DNS دامنه اضافه کنید.
         {% endif %}
     </p>
+
     <div class="progress-wrap">
         <div class="progress-line" aria-hidden="true"><span id="dns-bar"></span></div>
         <p id="dns-progress" class="progress-label" aria-live="polite"></p>
     </div>
 
+    <p id="refresh-hint" class="hint refresh-hint" {% if not domain.values_refreshed %}hidden{% endif %}>
+        مقدارهای جدید جایگزین شدند. رکورد قبلی را در DNS با همین مقدارها عوض کنید و بعد تأیید کنید.
+    </p>
+
+    <div id="dns-rejected" {% if domain.status != 'dns_rejected' %}hidden{% endif %}>
+        <div class="callout callout-danger">
+            <strong>Let's Encrypt این مرحله را رد کرد</strong>
+            <p>تلاش مجدد همین‌جا می‌ماند. صدور از اول شروع نمی‌شود و مقدارهای تازه در همین کارت جایگزین می‌شوند.</p>
+        </div>
+        <div class="error-box" id="dns-error-box" {% if not domain.error_message %}hidden{% endif %}>{{ domain.error_message or '' }}</div>
+        <form id="retry-form" action="/domains/{{ domain.id }}/retry" method="post" class="action-row">
+            <button type="submit" class="btn btn-primary" id="retry-btn" {% if domain.is_running %}disabled{% endif %}>تلاش مجدد همین مرحله</button>
+        </form>
+    </div>
+
+    <div id="prior-error" {% if not (domain.status == 'pending_dns' and domain.error_message) %}hidden{% endif %}>
+        <div class="callout callout-danger">
+            <strong>نتیجه تلاش قبلی</strong>
+            <p>مقدارهای جدید در همین مرحله جایگزین می‌شوند. لازم نیست دامنه را دوباره وارد کنید.</p>
+        </div>
+        <div class="error-box" id="prior-error-box">{{ domain.error_message or '' }}</div>
+    </div>
+
+    <div id="awaiting-alert" class="alert alert-info" {% if domain.status == 'dns_rejected' or domain.awaiting_user or not domain.is_running %}hidden{% endif %}>
+        <span class="spinner"></span>
+        <span id="awaiting-text">رکوردهای این مرحله در حال به‌روزرسانی هستند.</span>
+    </div>
+
     <details class="help">
-        <summary>مراحل تنظیم</summary>
+        <summary>چطور رکورد را بگذارم</summary>
         <ol class="steps">
             <li>به پنل DNS دامنه بروید</li>
             <li>همه مقدارهای زیر را با هم اضافه کنید</li>
-            <li>چند دقیقه صبر کنید؛ وضعیت هر رکورد همین‌جا عوض می‌شود</li>
-            <li>وقتی همه سبز شد، «بررسی DNS و صدور گواهی» را بزنید</li>
+            <li>چند دقیقه صبر کنید تا وضعیت هر رکورد سبز شود</li>
+            <li>بعد «بررسی DNS و صدور گواهی» را بزنید</li>
         </ol>
     </details>
-
-    <div id="awaiting-alert" class="alert alert-info" {% if domain.awaiting_user or not domain.challenges %}hidden{% endif %}>
-        <span class="spinner"></span>
-        چالش بعدی در حال آماده‌شدن است. چند ثانیه دیگر مقدار جدید همین‌جا اضافه می‌شود.
-    </div>
-
-    <form id="verify-form" action="/domains/{{ domain.id }}/verify" method="post" class="action-row">
-        <button type="submit" class="btn btn-success" id="verify-btn">
-            بررسی DNS و صدور گواهی
-        </button>
-        <p class="hint" id="verify-hint"></p>
-    </form>
 
     <div id="challenge-list" class="challenge-grid">
         {% for ch in domain.challenges %}
@@ -122,26 +153,54 @@
         {% endfor %}
     </div>
 
-</div>
+    <form id="verify-form" action="/domains/{{ domain.id }}/verify" method="post" class="action-row" {% if domain.status == 'dns_rejected' %}hidden{% endif %}>
+        <button type="submit" class="btn btn-success" id="verify-btn" {% if not domain.awaiting_user %}disabled{% endif %}>
+            بررسی DNS و صدور گواهی
+        </button>
+        <p class="hint" id="verify-hint">
+            {% if not domain.awaiting_user %}
+            دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود.
+            {% else %}
+            بعد از سبز شدن رکوردها این دکمه را بزنید.
+            {% endif %}
+        </p>
+    </form>
+</section>
 
-<div class="card" id="active-card" {% if domain.status != 'active' %}hidden{% endif %}>
-    <h2>گواهی آماده است</h2>
-    <p class="hint" style="margin-bottom:1rem;">فایل‌ها را دانلود کنید یا در صورت نیاز تمدید را شروع کنید.</p>
+<section class="card" id="step-check" {% if step != 3 %}hidden{% endif %}>
+    <div id="checking-panel" {% if domain.status == 'failed' %}hidden{% endif %}>
+        <div class="section-head">
+            <h2>مرحله ۳ — تأیید Let's Encrypt</h2>
+        </div>
+        <div class="alert alert-info">
+            <span class="spinner"></span>
+            <span>رکوردها ارسال شده‌اند. Let's Encrypt در حال بررسی است و همین صفحه خودش به‌روز می‌شود.</span>
+        </div>
+    </div>
+    <div id="failed-panel" {% if domain.status != 'failed' %}hidden{% endif %}>
+        <div class="section-head">
+            <h2>صدور انجام نشد</h2>
+        </div>
+        <p class="hint" style="margin-bottom:0.8rem;">این خطا با شروع دوباره از مرحله آماده‌سازی ادامه پیدا می‌کند.</p>
+        <div class="error-box" id="fail-error-box" {% if not domain.error_message %}hidden{% endif %}>{{ domain.error_message or '' }}</div>
+        <form id="restart-form" action="/domains/{{ domain.id }}/retry" method="post" class="action-row">
+            <button type="submit" class="btn btn-primary" id="restart-btn" {% if domain.is_running %}disabled{% endif %}>شروع از اول</button>
+        </form>
+    </div>
+</section>
+
+<section class="card" id="step-done" {% if step != 4 %}hidden{% endif %}>
+    <div class="section-head">
+        <h2>مرحله ۴ — گواهی آماده است</h2>
+    </div>
+    <p class="hint" style="margin-bottom:1rem;">فایل‌ها را دانلود کنید یا در صورت نیاز تمدید را از همین ویزارد شروع کنید.</p>
     <div class="action-row" style="margin-top:0;">
         <a href="/domains/{{ domain.id }}/download" class="btn btn-success">دانلود گواهی (ZIP)</a>
         <form action="/domains/{{ domain.id }}/renew" method="post">
             <button type="submit" class="btn btn-warning" id="renew-btn" {% if domain.is_running %}disabled{% endif %}>تمدید گواهی</button>
         </form>
     </div>
-</div>
-
-<div class="card" id="failed-card" {% if domain.status != 'failed' %}hidden{% endif %}>
-    <h2>صدور گواهی انجام نشد</h2>
-    <div class="error-box" id="error-box" {% if not domain.error_message %}hidden{% endif %}>{{ domain.error_message or '' }}</div>
-    <form action="/domains/{{ domain.id }}/retry" method="post" class="action-row">
-        <button type="submit" class="btn btn-primary" id="retry-btn" {% if domain.is_running %}disabled{% endif %}>تلاش مجدد</button>
-    </form>
-</div>
+</section>
 
 <div class="card quiet-card">
     <form action="/domains/{{ domain.id }}/delete" method="post" onsubmit="return confirm('این دامنه از پنل حذف شود؟')">
@@ -168,6 +227,16 @@
     document.getElementById("verify-form").addEventListener("submit", () => {
         verifyBtn.disabled = true;
         verifyBtn.textContent = "در حال بررسی...";
+    });
+    document.getElementById("retry-form").addEventListener("submit", () => {
+        const btn = document.getElementById("retry-btn");
+        btn.disabled = true;
+        btn.textContent = "در حال تلاش مجدد...";
+    });
+    document.getElementById("restart-form").addEventListener("submit", () => {
+        const btn = document.getElementById("restart-btn");
+        btn.disabled = true;
+        btn.textContent = "در حال شروع...";
     });
 
     list.addEventListener("click", (event) => {
@@ -256,7 +325,7 @@
         found.textContent = values.length ? values.join(" | ") : "(هیچ مقداری یافت نشد)";
     }
 
-    function applyChallenges(challenges) {
+    function applyChallenges(challenges, rejected) {
         const keys = challenges.map((ch) => ch.txt_value);
         const current = [...list.querySelectorAll("[data-key]")].map((el) => el.dataset.key);
         const same = keys.length === current.length && keys.every((key, i) => key === current[i]);
@@ -273,13 +342,14 @@
 
         const found = challenges.filter((ch) => ch.dns_status === "found").length;
         const total = challenges.length;
-        const bar = document.getElementById("dns-bar");
-        bar.style.width = total ? `${Math.round((found / total) * 100)}%` : "0";
+        document.getElementById("dns-bar").style.width = total ? `${Math.round((found / total) * 100)}%` : "0";
         setProgress(found, total);
         const names = [...new Set(challenges.map((ch) => ch.txt_name).filter(Boolean))];
         const lead = document.getElementById("dns-lead");
         lead.replaceChildren();
-        if (challenges.length > 1 && names.length === 1) {
+        if (rejected) {
+            lead.textContent = "این مقدارها رد شده‌اند. تلاش مجدد، مقدار تازه را در همین مرحله جایگزین می‌کند.";
+        } else if (challenges.length > 1 && names.length === 1) {
             lead.append("هر دو مقدار را همزمان روی ");
             const name = document.createElement("bdi");
             name.dir = "ltr";
@@ -302,17 +372,43 @@
         progress.append(count, " رکورد در DNS دیده شد");
     }
 
-    function runningText(data) {
-        if (data.status === "renewing") return "در حال تمدید گواهی. همین صفحه خودش به‌روز می‌شود.";
-        if (data.status === "issuing" || data.status === "verifying") return "در حال صدور گواهی. همین صفحه خودش به‌روز می‌شود.";
-        if (!data.challenges || !data.challenges.length) return "در حال آماده‌کردن رکوردهای TXT. لازم نیست صفحه را رفرش کنید.";
-        return "منتظر تأیید DNS. وضعیت رکوردها خودکار بررسی می‌شود.";
+    function paintWizard(step) {
+        document.querySelectorAll("#wizard [data-step]").forEach((el) => {
+            const n = Number(el.dataset.step);
+            el.classList.toggle("is-current", n === step);
+            el.classList.toggle("is-done", n < step);
+            el.classList.toggle("is-upcoming", n > step);
+            if (n === step) el.setAttribute("aria-current", "step");
+            else el.removeAttribute("aria-current");
+        });
+        document.getElementById("step-prepare").hidden = step !== 1;
+        document.getElementById("step-dns").hidden = step !== 2;
+        document.getElementById("step-check").hidden = step !== 3;
+        document.getElementById("step-done").hidden = step !== 4;
+    }
+
+    function setBox(id, message) {
+        const box = document.getElementById(id);
+        if (!message) {
+            box.hidden = true;
+            box.textContent = "";
+            return;
+        }
+        box.hidden = false;
+        box.textContent = message;
+    }
+
+    function disable(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.disabled = value;
     }
 
     function apply(data) {
+        const step = data.wizard_step || 1;
         const badge = document.getElementById("status-badge");
         badge.textContent = data.status_label || data.status;
         badge.className = "badge badge-" + (data.status_color || "secondary");
+        paintWizard(step);
 
         const expiry = document.getElementById("expiry");
         if (data.cert_expires_at) {
@@ -320,36 +416,50 @@
             expiry.hidden = false;
         }
 
-        const running = document.getElementById("running-alert");
-        running.hidden = !data.is_running;
-        document.getElementById("running-text").textContent = runningText(data);
+        document.getElementById("prepare-text").textContent = data.status === "renewing"
+            ? "در حال شروع تمدید و گرفتن رکوردهای DNS تازه."
+            : "در حال گرفتن چالش DNS از Let's Encrypt. همین صفحه خودش به‌روز می‌شود.";
 
-        const showDns = (data.challenges || []).length > 0 && (data.status === "pending_dns" || data.status === "renewing");
-        document.getElementById("dns-card").hidden = !showDns;
-        if (showDns) {
-            applyChallenges(data.challenges);
-            const waiting = !data.awaiting_user;
-            document.getElementById("awaiting-alert").hidden = !waiting;
-            verifyBtn.disabled = waiting;
-            verifyHint.textContent = waiting
-                ? "دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود."
-                : "بعد از سبز شدن رکوردها این دکمه را بزنید.";
+        const rejected = data.status === "dns_rejected";
+        const challenges = data.challenges || [];
+        if (challenges.length) applyChallenges(challenges, rejected);
+        else {
+            if (!selectionInside(list)) list.replaceChildren();
+            document.getElementById("dns-bar").style.width = "0";
+            document.getElementById("dns-progress").textContent = "";
         }
 
-        document.getElementById("active-card").hidden = data.status !== "active";
-        document.getElementById("failed-card").hidden = data.status !== "failed";
-        const errorBox = document.getElementById("error-box");
-        if (data.error_message) {
-            errorBox.hidden = false;
-            errorBox.textContent = data.error_message;
-        } else if (data.status !== "failed") {
-            errorBox.hidden = true;
+        document.getElementById("dns-rejected").hidden = !rejected;
+        setBox("dns-error-box", rejected ? data.error_message : "");
+        const showPrior = !rejected && data.status === "pending_dns" && !!data.error_message;
+        document.getElementById("prior-error").hidden = !showPrior;
+        setBox("prior-error-box", showPrior ? data.error_message : "");
+        document.getElementById("refresh-hint").hidden = !data.values_refreshed;
+
+        const waitingMore = !rejected && !!data.is_running && !data.awaiting_user && challenges.length > 0;
+        document.getElementById("awaiting-alert").hidden = !waitingMore;
+        if (waitingMore) {
+            document.getElementById("awaiting-text").textContent = data.values_refreshed
+                ? "مقدار تازه در حال اضافه‌شدن به همین مرحله است."
+                : "چالش بعدی در حال آماده‌شدن است. مقدار جدید همین‌جا اضافه می‌شود.";
         }
+        document.getElementById("verify-form").hidden = rejected;
+        verifyBtn.disabled = rejected || !data.awaiting_user;
+        if (!verifyBtn.disabled) verifyBtn.textContent = "بررسی DNS و صدور گواهی";
+        verifyHint.textContent = data.awaiting_user
+            ? "بعد از سبز شدن رکوردها این دکمه را بزنید."
+            : "دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود.";
+
+        const failed = data.status === "failed";
+        document.getElementById("checking-panel").hidden = failed;
+        document.getElementById("failed-panel").hidden = !failed;
+        setBox("fail-error-box", failed ? data.error_message : "");
 
         const busy = !!data.is_running;
-        document.getElementById("renew-btn").disabled = busy;
-        document.getElementById("retry-btn").disabled = busy;
-        document.getElementById("delete-btn").disabled = busy;
+        disable("renew-btn", busy);
+        disable("retry-btn", busy);
+        disable("restart-btn", busy);
+        disable("delete-btn", busy);
 
         const stamp = new Date().toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
         document.getElementById("live-stamp").textContent = "به‌روز شد " + stamp;
@@ -359,6 +469,7 @@
     function nextDelay(data) {
         if (!data) return 4000;
         if (data.status === "active" && !data.is_running) return 20000;
+        if (data.status === "dns_rejected" || data.status === "failed") return 8000;
         const challenges = data.challenges || [];
         if (!challenges.length || !data.awaiting_user) return 2000;
         if (data.status === "pending_dns" || data.status === "renewing") return 8000;
@@ -393,10 +504,6 @@
         const found = {{ domain.challenges | selectattr('dns_status', 'equalto', 'found') | list | length }};
         document.getElementById("dns-bar").style.width = `${Math.round((found / initial) * 100)}%`;
         setProgress(found, initial);
-        verifyBtn.disabled = {{ 'true' if not domain.awaiting_user else 'false' }};
-        verifyHint.textContent = verifyBtn.disabled
-            ? "دکمه بعد از آماده‌شدن همه چالش‌ها فعال می‌شود."
-            : "بعد از سبز شدن رکوردها این دکمه را بزنید.";
     }
 
     timer = setTimeout(tick, 1500);

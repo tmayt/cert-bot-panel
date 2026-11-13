@@ -1,0 +1,40 @@
+name: Build and push image
+
+# روی هر push یک بار ایمیج ساخته و به رجیستری Gitea پوش می‌شود.
+# سکرت‌های لازم در مخزن → Settings → Actions → Secrets:
+#   GITEA_USERNAME  نام کاربری ورود به Gitea
+#   GITEA_PASSWORD  رمز یا personal access token با دسترسی نوشتن پکیج
+
+on:
+  push:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in, build, and push
+        env:
+          REGISTRY: gitea.tmayt.ir
+          IMAGE: gitea.tmayt.ir/thaiostream/certbot-panel
+          GITEA_USERNAME: ${{ secrets.GITEA_USERNAME }}
+          GITEA_PASSWORD: ${{ secrets.GITEA_PASSWORD }}
+        run: |
+          if [ -z "$GITEA_USERNAME" ] || [ -z "$GITEA_PASSWORD" ]; then
+            echo "Secrets GITEA_USERNAME and GITEA_PASSWORD are not set."
+            exit 1
+          fi
+          echo "$GITEA_PASSWORD" | docker login "$REGISTRY" --username "$GITEA_USERNAME" --password-stdin
+          docker build \
+            --tag "$IMAGE:latest" \
+            --tag "$IMAGE:${{ github.sha }}" \
+            .
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
