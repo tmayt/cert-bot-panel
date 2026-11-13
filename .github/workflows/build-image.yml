@@ -1,7 +1,7 @@
 name: Build and push image
 
-# روی هر push یک بار ایمیج ساخته و به رجیستری Gitea پوش می‌شود.
-# سکرت‌های لازم در مخزن → Settings → Actions → Secrets:
+# روی هر push به GitHub یک بار ایمیج ساخته و به رجیستری Gitea پوش می‌شود.
+# سکرت‌ها در مخزن GitHub → Settings → Secrets and variables → Actions:
 #   GITEA_USERNAME  نام کاربری ورود به Gitea
 #   GITEA_PASSWORD  رمز یا personal access token با دسترسی نوشتن پکیج
 
@@ -11,6 +11,9 @@ on:
 concurrency:
   group: image-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:

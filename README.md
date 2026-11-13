@@ -23,20 +23,20 @@ docker compose up -d --build
 
 ## ساخت خودکار ایمیج
 
-با هر push، گردش‌کار `.gitea/workflows/build-image.yml` یک بار ایمیج را می‌سازد و به این آدرس پوش می‌کند:
+با هر push به GitHub، گردش‌کار `.github/workflows/build-image.yml` یک بار ایمیج را می‌سازد و به این آدرس پوش می‌کند:
 
 `gitea.tmayt.ir/thaiostream/certbot-panel`
 
-تگ `latest` همان آدرسی است که `docker-compose.yml` استفاده می‌کند. هر بیلد هم با تگ SHA همان commit هم پوش می‌شود.
+تگ `latest` همان آدرسی است که `docker-compose.yml` استفاده می‌کند. هر بیلد هم با تگ SHA همان commit هم پوش می‌شود. هر push، از جمله شاخه‌های غیر از `master`، تگ `latest` را عوض می‌کند.
 
-اطلاعات ورود Gitea را در مخزن بگذارید: Settings → Actions → Secrets. این مقادیر داخل مخزن نمی‌آیند.
+اطلاعات ورود Gitea را در سکرت‌های GitHub Actions بگذارید: Settings → Secrets and variables → Actions. این مقادیر داخل مخزن نمی‌آیند.
 
 | سکرت | مقدار |
 |------|-------|
 | `GITEA_USERNAME` | نام کاربری Gitea |
 | `GITEA_PASSWORD` | رمز عبور، یا personal access token با دسترسی نوشتن پکیج |
 
-رانر Actions باید برچسب `ubuntu-latest` داشته باشد و دستور `docker` روی همان رانر قابل اجرا باشد. بعد از پوش موفق ایمیج:
+گردش‌کار روی رانر `ubuntu-latest` گیتهاب اجرا می‌شود و Docker روی همان رانر موجود است. اگر روی همان شاخه پوش دیگری در حال بیلد باشد، بیلد قبلی لغو می‌شود. بعد از پوش موفق ایمیج:
 
 ```bash
 docker compose pull
