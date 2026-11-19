@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -6,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app import database as db
+
+logger = logging.getLogger(__name__)
 
 STATE_DIR = os.environ.get("STATE_DIR", "/data/state")
 CONFIG_DIR = os.environ.get("CERTBOT_CONFIG_DIR", "/data/letsencrypt")
@@ -41,8 +44,119 @@ def clear_state(domain_id: int) -> None:
         path.unlink()
 
 
+LINEAGE_FILES = ("cert.pem", "chain.pem", "fullchain.pem", "privkey.pem")
+BROKEN_LINEAGE_MESSAGE = (
+    "فایل‌های گواهی میانبر به archive نیستند. "
+    "تمدید در این حالت رد می‌شود و صدور دوباره گواهی را با نام دیگری ذخیره می‌کند. "
+    "محتوای فایل‌ها با بایگانی یکی نبود و میانبر ساخته نشد."
+)
+
+
 def cert_path(domain: str) -> Path:
     return Path(CONFIG_DIR) / "live" / domain
+
+
+def _lineage_name_ok(domain: str) -> bool:
+    return bool(domain) and domain not in {".", ".."} and "/" not in domain and "\\" not in domain
+
+
+def archive_dir(domain: str) -> Path:
+    return Path(CONFIG_DIR) / "archive" / domain
+
+
+def renewal_config_path(domain: str) -> Path:
+    return Path(CONFIG_DIR) / "renewal" / f"{domain}.conf"
+
+
+def _matching_archive_file(archive: Path, kind: str, data: bytes) -> Path | None:
+    best: Path | None = None
+    best_version = -1
+    for candidate in archive.iterdir():
+        name = candidate.name
+        if not name.startswith(kind) or not name.endswith(".pem"):
+            continue
+        version_text = name[len(kind):-4]
+        if not version_text.isdigit():
+            continue
+        try:
+            content = candidate.read_bytes()
+        except OSError:
+            continue
+        if content != data:
+            continue
+        version = int(version_text)
+        if version > best_version:
+            best = candidate
+            best_version = version
+    return best
+
+
+def _replace_with_symlink(path: Path, target: Path) -> None:
+    relative = os.path.relpath(target, start=path.parent)
+    temporary = path.with_name(f".{path.name}.symlink-tmp")
+    if temporary.is_symlink() or temporary.exists():
+        temporary.unlink()
+    try:
+        temporary.symlink_to(relative)
+        os.replace(temporary, path)
+    except OSError:
+        if temporary.is_symlink() or temporary.exists():
+            temporary.unlink()
+        raise
+
+
+def live_symlinks_ready(domain: str) -> bool:
+    if not _lineage_name_ok(domain):
+        return False
+    live = cert_path(domain)
+    if not live.is_dir():
+        return False
+    return all((live / name).is_symlink() for name in LINEAGE_FILES)
+
+
+def ensure_live_symlinks(domain: str) -> None:
+    """Point live certificate files back at archive when a copy replaced the symlinks.
+
+    Certbot refuses to renew a lineage unless cert.pem, chain.pem, fullchain.pem
+    and privkey.pem are symlinks. A plain copy of those files makes renewal fail
+    and a later certonly run stores the new certificate under a different name.
+    """
+    if not _lineage_name_ok(domain):
+        return
+    live = cert_path(domain)
+    archive = archive_dir(domain)
+    if not live.is_dir() or not archive.is_dir():
+        return
+
+    replacements: list[tuple[Path, Path]] = []
+    for name in LINEAGE_FILES:
+        path = live / name
+        if path.is_symlink():
+            continue
+        if not path.is_file():
+            return
+        target = _matching_archive_file(archive, name.removesuffix(".pem"), path.read_bytes())
+        if target is None:
+            return
+        replacements.append((path, target))
+
+    for path, target in replacements:
+        _replace_with_symlink(path, target)
+    if replacements:
+        logger.info("Restored certificate symlinks for %s", domain)
+
+
+def repair_certificate_symlinks() -> None:
+    live_root = Path(CONFIG_DIR) / "live"
+    if not live_root.is_dir():
+        return
+    for entry in live_root.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            ensure_live_symlinks(entry.name)
+        except OSError:
+            logger.exception("Could not restore certificate symlinks for %s", entry.name)
 
 
 def get_cert_expiry(domain: str) -> str | None:
@@ -141,6 +255,14 @@ def _run_certbot(domain_id: int, domain: str, renew: bool = False) -> None:
 
     cmd = _build_certbot_cmd(domain, domain_id, renew=renew)
     try:
+        ensure_live_symlinks(domain)
+        if (
+            cert_path(domain).is_dir()
+            and renewal_config_path(domain).is_file()
+            and not live_symlinks_ready(domain)
+        ):
+            db.mark_failed(domain_id, BROKEN_LINEAGE_MESSAGE)
+            return
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -153,6 +275,7 @@ def _run_certbot(domain_id: int, domain: str, renew: bool = False) -> None:
         output, _ = proc.communicate()
 
         if proc.returncode == 0:
+            ensure_live_symlinks(domain)
             expires = get_cert_expiry(domain)
             db.mark_active(domain_id, expires)
         else:

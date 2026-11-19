@@ -24,7 +24,14 @@ from app.auth import (
     safe_next_url,
     verify_credentials,
 )
-from app.certbot_service import get_cert_files, is_running, issue_certificate, renew_certificate, retry_certificate
+from app.certbot_service import (
+    get_cert_files,
+    is_running,
+    issue_certificate,
+    renew_certificate,
+    repair_certificate_symlinks,
+    retry_certificate,
+)
 from app.database import init_db
 from app.dns_checker import verify_domain
 
@@ -40,6 +47,7 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 @app.on_event("startup")
 def startup():
     init_db()
+    repair_certificate_symlinks()
 
 
 @app.get("/login", response_class=HTMLResponse)
